@@ -1,0 +1,37 @@
+﻿services:
+  - type: web
+    name: vision-agent-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: DEBUG
+        value: "false"
+      - key: LLM_PROVIDER
+        value: deepseek
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_LLM_MODEL
+        value: deepseek-v4-pro
+      - key: DEEPSEEK_ROUTER_MODEL
+        value: deepseek-v4-flash
+      - key: VISION_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_VISION_MODEL
+        value: gpt-4o-mini
+      - key: DATABASE_PATH
+        value: /tmp/vision_agent.db
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: JWT_SECRET
+        generateValue: true

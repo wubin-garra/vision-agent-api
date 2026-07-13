@@ -1,0 +1,153 @@
+import { z } from "zod";
+
+export const AgentId = {
+  LOCAL_GUIDE: "local_guide",
+  ART_CRITIC: "art_critic",
+  DESIGN_CRITIC: "design_critic",
+  STYLIST: "stylist",
+  FOOD_EXPLORER: "food_explorer",
+  TEXT_READER: "text_reader",
+  GENERAL_CURIOSITY: "general_curiosity",
+} as const;
+
+export type AgentId = (typeof AgentId)[keyof typeof AgentId];
+
+export const agentIdSchema = z.enum([
+  "local_guide",
+  "art_critic",
+  "design_critic",
+  "stylist",
+  "food_explorer",
+  "text_reader",
+  "general_curiosity",
+]);
+
+export const SceneType = {
+  LANDMARK_STREET: "landmark_street",
+  ARTWORK: "artwork",
+  OUTFIT: "outfit",
+  FOOD: "food",
+  TEXT_HEAVY: "text_heavy",
+  PRODUCT_DESIGN: "product_design",
+  GENERAL: "general",
+} as const;
+
+export type SceneType = (typeof SceneType)[keyof typeof SceneType];
+
+export const sceneTypeSchema = z.enum([
+  "landmark_street",
+  "artwork",
+  "outfit",
+  "food",
+  "text_heavy",
+  "product_design",
+  "general",
+]);
+
+export const insightContextSchema = z.object({
+  cultural: z.string().nullish(),
+  historical: z.string().nullish(),
+  practical: z.string().nullish(),
+});
+
+export const flavorNoteSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  emoji: z.string().nullish(),
+});
+
+export const nearbyPickSchema = z.object({
+  name: z.string(),
+  blurb: z.string().default(""),
+});
+
+export const exploreChipsSchema = z.object({
+  culinary: z.array(z.string()).default([]),
+  nearby: z.array(z.string()).default([]),
+});
+
+export const shareCardSchema = z.object({
+  headline: z.string().default(""),
+  quote: z.string().default(""),
+  cta: z.string().default(""),
+});
+
+export const structuredInsightSchema = z.object({
+  title: z.string(),
+  category: z.string(),
+  confidence: z.number().min(0).max(1).default(0.5),
+  visible_clues: z.array(z.string()).default([]),
+  context: insightContextSchema.default({}),
+  style_vocabulary: z.array(z.string()).default([]),
+  suggested_searches: z.array(z.string()).default([]),
+  next_actions: z.array(z.string()).default([]),
+  agent_id: agentIdSchema.default("general_curiosity"),
+  disclaimer: z.string().default("非鉴定/医疗/法律建议，仅供参考。"),
+  subtitle: z.string().nullish(),
+  narrative: z.string().nullish(),
+  flavor_notes: z.array(flavorNoteSchema).default([]),
+  nearby_picks: z.array(nearbyPickSchema).default([]),
+  explore_chips: exploreChipsSchema.default({ culinary: [], nearby: [] }),
+  share_card: shareCardSchema.nullish(),
+});
+
+export type StructuredInsight = z.infer<typeof structuredInsightSchema>;
+
+export const sceneClassificationSchema = z.object({
+  scene_type: sceneTypeSchema,
+  text_density: z.string().default("none"),
+  has_person: z.boolean().default(false),
+  recommended_agent: agentIdSchema.default("general_curiosity"),
+  reasoning: z.string().default(""),
+});
+
+export type SceneClassification = z.infer<typeof sceneClassificationSchema>;
+
+export const followUpRequestSchema = z.object({
+  memory_id: z.string().min(1),
+  question: z.string().min(1),
+  locale: z.string().default("zh-CN"),
+});
+
+export type FollowUpRequest = z.infer<typeof followUpRequestSchema>;
+
+export const followUpResponseSchema = z.object({
+  memory_id: z.string(),
+  answer: z.string(),
+  suggested_followups: z.array(z.string()).default([]),
+});
+
+export type FollowUpResponse = z.infer<typeof followUpResponseSchema>;
+
+export const memoryItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  category: z.string(),
+  agent_id: agentIdSchema,
+  image_url: z.string(),
+  thumbnail_url: z.string(),
+  insight: structuredInsightSchema,
+  created_at: z.string(),
+  locale: z.string(),
+});
+
+export type MemoryItem = z.infer<typeof memoryItemSchema>;
+
+export const memoryListResponseSchema = z.object({
+  items: z.array(memoryItemSchema),
+  total: z.number(),
+});
+
+export type MemoryListResponse = z.infer<typeof memoryListResponseSchema>;
+
+export const ttsRequestSchema = z.object({
+  text: z.string().min(1),
+  locale: z.string().default("zh-CN"),
+});
+
+export const sharePosterRequestSchema = z.object({
+  memory_id: z.string().min(1),
+  title: z.string().default(""),
+  category: z.string().default(""),
+  summary: z.string().default(""),
+});

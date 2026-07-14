@@ -162,14 +162,14 @@ ${FOOD_SCAN_INSIGHT_JSON_SCHEMA}
 
 写作与估算规则（参考 Chance 食识拍）：
 1. title 必须带合适 emoji，生动但准确
-2. narrative 描述色彩、食材层次与营养亮点，**2 句以内**，每句不超过 40 字
+2. narrative 描述色彩、食材层次与营养亮点，2-3 句
 3. nutrition 根据可见份量**合理估算**热量与碳水/脂肪/蛋白质（current）及常见日目标（goal）
-4. diet_summary 一两句分析蛋白质来源、饱腹感、均衡性
-5. nutrition_tips 2-3 条，每条 title 短、body 一句可执行建议
+4. diet_summary 分析蛋白质来源、饱腹感、均衡性
+5. nutrition_tips 2-4 条，每条有 title + body，给出可执行建议
 6. allergens 列出图中可能含有的过敏原（甲壳类、鱼类、蛋类、麸质、坚果等），无则空数组
 7. explore_chips.culinary 提供 2-3 个用户可能追问的营养问题
 8. 非食物图片时降低 confidence，在 narrative 中说明
-9. 整体输出精简，避免长段落，确保 JSON 完整闭合
+9. 必须完整输出 schema 中的关键字段（nutrition / diet_summary / nutrition_tips / allergens / explore_chips / share_card），不要省略
 
 使用用户 locale 对应的语言。营养值为估算，非精确检测。
 `,

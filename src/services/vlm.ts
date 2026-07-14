@@ -14,7 +14,11 @@ import {
 } from "./context.js";
 import { visionService } from "./vision.js";
 
-function analyzeMaxTokens(agentId?: string): number {
+function analyzeMaxTokens(agentId?: string, qualityMode?: boolean): number {
+  if (qualityMode) {
+    if (agentId === "food_scan" || agentId === "food_explorer") return 3500;
+    return 2500;
+  }
   if (agentId === "food_scan" || agentId === "food_explorer") return 2500;
   return 2000;
 }
@@ -27,7 +31,7 @@ function buildVisionAnalyzeUserText(input: {
   return (
     `Locale: ${input.locale}\n` +
     `${formatGeoContext(input.latitude, input.longitude)}\n\n` +
-    "请直接根据图片输出结构化 JSON 洞察。字段尽量精简，narrative 与 tips 简明扼要。" +
+    "请直接根据图片输出结构化 JSON 洞察。" +
     "只输出合法 JSON，务必闭合所有字符串与括号。"
   );
 }
@@ -129,16 +133,20 @@ export class VlmService {
     latitude?: number | null;
     longitude?: number | null;
     agentId?: string;
+    /** 专项镜头：优先 DeepSeek 完整输出，不走精简视觉直出 */
+    qualityMode?: boolean;
   }): Promise<Record<string, unknown>> {
     const locale = input.locale ?? "zh-CN";
     if (this.demoMode) {
       return this.demoInsight(locale);
     }
 
-    const maxTokens = analyzeMaxTokens(input.agentId);
+    const qualityMode = Boolean(input.qualityMode);
+    const maxTokens = analyzeMaxTokens(input.agentId, qualityMode);
 
-    // 主路径：视觉多模态直出 insight（看图，省去 DeepSeek 二次推理）
-    if (visionService.enabled) {
+    // 自动模式：视觉多模态直出（更快）
+    // 专项镜头 qualityMode：跳过，走下方完整 caption + DeepSeek
+    if (!qualityMode && visionService.enabled) {
       const userText = buildVisionAnalyzeUserText({
         locale,
         latitude: input.latitude,
@@ -163,10 +171,9 @@ export class VlmService {
           }
           return raw;
         } catch (parseErr) {
-          // 仅解析失败时重试一次（更精简）
           const raw = await runVision(
             userText +
-              "\n\n注意：上次 JSON 解析失败。请输出更精简但仍完整的合法 JSON。",
+              "\n\n注意：上次 JSON 解析失败。请重新输出完整合法 JSON，务必闭合所有字段。",
           );
           if (settings.debug) {
             console.log(
@@ -186,15 +193,22 @@ export class VlmService {
       }
     }
 
+    const captionMode = qualityMode ? "full" : "fast";
     const caption =
       input.imageCaption ??
-      (await this.caption(input.imageB64, locale, undefined, "fast"));
+      (await this.caption(input.imageB64, locale, undefined, captionMode));
     const userText = buildAnalyzeUserText({
       locale,
       caption,
       latitude: input.latitude,
       longitude: input.longitude,
     });
+
+    if (settings.debug) {
+      console.log(
+        `[analyze] text LLM qualityMode=${qualityMode} agent=${input.agentId ?? "?"} captionMode=${captionMode}`,
+      );
+    }
 
     return this.chatJson({
       model: input.model ?? settings.llmModel,
@@ -278,7 +292,7 @@ export class VlmService {
       model: settings.llmModel,
       systemPrompt: isFoodScan ? FOOD_SCAN_FOLLOWUP_SYSTEM : FOLLOWUP_SYSTEM,
       userText,
-      maxTokens: isFoodScan ? 2500 : 1500,
+      maxTokens: isFoodScan ? 3500 : 1500,
       retryOnParseError: true,
     });
   }

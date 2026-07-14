@@ -134,8 +134,8 @@ function timedLog(label: string, started: number): void {
 }
 
 /**
- * 有 override：fast caption ∥ vision insight
- * 无 override：fast caption → router → vision insight
+ * 有 override（专项镜头）：完整 caption → DeepSeek 完整 JSON（质量优先）
+ * 无 override（自动）：fast caption → router → vision oneshot（速度优先）
  */
 async function runAnalyzePipeline(input: {
   imageBytes: Buffer;
@@ -150,31 +150,29 @@ async function runAnalyzePipeline(input: {
   const pipelineStarted = Date.now();
 
   if (input.agentOverride) {
-    input.onStage?.("analyzing");
+    input.onStage?.("captioning");
     input.onAgent?.(input.agentOverride);
     const captionStarted = Date.now();
+    const caption = await visionService.describeImage(
+      imageB64,
+      input.locale,
+      input.imageBytes,
+      "full",
+    );
+    timedLog("full_caption", captionStarted);
+
+    input.onStage?.("analyzing");
     const insightStarted = Date.now();
-    const [caption, insight] = await Promise.all([
-      visionService
-        .describeImageFast(imageB64, input.locale, input.imageBytes)
-        .then((c) => {
-          timedLog("fast_caption", captionStarted);
-          return c;
-        }),
-      insightPlanner
-        .analyze({
-          imageBytes: input.imageBytes,
-          agentId: input.agentOverride,
-          locale: input.locale,
-          imageCaption: null,
-          latitude: input.latitude,
-          longitude: input.longitude,
-        })
-        .then((i) => {
-          timedLog("insight", insightStarted);
-          return i;
-        }),
-    ]);
+    const insight = await insightPlanner.analyze({
+      imageBytes: input.imageBytes,
+      agentId: input.agentOverride,
+      locale: input.locale,
+      imageCaption: caption,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      qualityMode: true,
+    });
+    timedLog("insight_quality", insightStarted);
     timedLog("pipeline_override_total", pipelineStarted);
     return { caption, agentId: input.agentOverride, insight };
   }
@@ -207,6 +205,7 @@ async function runAnalyzePipeline(input: {
     imageCaption: caption,
     latitude: input.latitude,
     longitude: input.longitude,
+    qualityMode: false,
   });
   timedLog("insight", insightStarted);
   timedLog("pipeline_auto_total", pipelineStarted);

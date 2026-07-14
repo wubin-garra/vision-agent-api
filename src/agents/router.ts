@@ -49,6 +49,8 @@ export class InsightPlanner {
     imageCaption?: string | null;
     latitude?: number | null;
     longitude?: number | null;
+    /** 手动选择的专项镜头：完整质量输出 */
+    qualityMode?: boolean;
   }): Promise<StructuredInsight> {
     const imageB64 = input.imageBytes.toString("base64");
     const systemPrompt = AGENT_PROMPTS[input.agentId];
@@ -60,6 +62,7 @@ export class InsightPlanner {
       latitude: input.latitude,
       longitude: input.longitude,
       agentId: input.agentId,
+      qualityMode: input.qualityMode,
     });
     raw.agent_id = input.agentId;
     const parsed = structuredInsightSchema.safeParse(raw);

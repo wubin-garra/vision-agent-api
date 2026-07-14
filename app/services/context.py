@@ -23,6 +23,9 @@ def format_followup_history(followups: list[dict[str, Any]]) -> str:
     for index, item in enumerate(followups, start=1):
         question = item.get("question", "")
         answer = item.get("answer", "")
+        structured = item.get("structured_answer")
+        if structured and isinstance(structured, dict) and structured.get("summary"):
+            answer = structured["summary"]
         lines.append(f"Q{index}: {question}\nA{index}: {answer}")
     return "\n\n".join(lines)
 

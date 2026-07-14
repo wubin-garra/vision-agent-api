@@ -30,6 +30,14 @@ class StorageService:
     def read_image_bytes(self, filename: str) -> bytes:
         return self.get_image_path(filename).read_bytes()
 
+    def delete_image_files(self, image_filename: str, thumbnail_filename: str) -> None:
+        for filename in (image_filename, thumbnail_filename):
+            if not filename:
+                continue
+            path = self.get_image_path(filename)
+            if path.exists():
+                path.unlink()
+
     def _process_image(self, data: bytes) -> bytes:
         img = Image.open(io.BytesIO(data))
         if img.mode in ("RGBA", "P"):

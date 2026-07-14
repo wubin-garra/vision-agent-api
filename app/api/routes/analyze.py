@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 from typing import AsyncGenerator, Optional
@@ -5,7 +6,7 @@ from typing import AsyncGenerator, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from sse_starlette.sse import EventSourceResponse
 
-from app.agents.prompts import resolve_followup_chips
+from app.agents.prompts import flatten_followup_suggestions, resolve_followup_chips
 from app.agents.router import insight_planner, scene_router
 from app.schemas.insight import (
     AgentId,
@@ -13,6 +14,7 @@ from app.schemas.insight import (
     FollowUpResponse,
     MemoryItem,
     MemoryListResponse,
+    StructuredFollowUpAnswer,
     StructuredInsight,
 )
 from app.services.database import memory_repository
@@ -21,6 +23,15 @@ from app.services.vlm import vlm_service
 from app.services.vision import vision_service
 
 router = APIRouter()
+
+FOOD_SCAN_THINKING_STEPS = [
+    "检查图像是否包含食物",
+    "识别主要食材与份量",
+    "估算热量与三大营养素",
+    "生成饮食建议与过敏原提示",
+]
+
+FOOD_SCAN_THINKING_STEP_DELAYS_SEC = [2.8, 3.0, 3.2, 0]
 
 
 def _record_to_item(record, base_url: str = "") -> MemoryItem:
@@ -121,14 +132,36 @@ async def analyze_image_stream(
         }
 
         yield {"event": "status", "data": json.dumps({"stage": "analyzing"})}
-        insight = await insight_planner.analyze(
-            processed,
-            agent_id,
-            locale=locale,
-            image_caption=caption,
-            latitude=latitude,
-            longitude=longitude,
+
+        analyze_task = asyncio.create_task(
+            insight_planner.analyze(
+                processed,
+                agent_id,
+                locale=locale,
+                image_caption=caption,
+                latitude=latitude,
+                longitude=longitude,
+            )
         )
+
+        if agent_id == AgentId.FOOD_SCAN:
+            for index, step in enumerate(FOOD_SCAN_THINKING_STEPS):
+                if analyze_task.done():
+                    break
+                yield {
+                    "event": "thinking",
+                    "data": json.dumps({"step": step, "index": index}),
+                }
+                delay = (
+                    FOOD_SCAN_THINKING_STEP_DELAYS_SEC[index]
+                    if index < len(FOOD_SCAN_THINKING_STEP_DELAYS_SEC)
+                    else 0
+                )
+                if delay <= 0:
+                    break
+                await asyncio.sleep(delay)
+
+        insight = await analyze_task
 
         yield {
             "event": "partial",
@@ -194,13 +227,31 @@ async def followup(body: FollowUpRequest):
         longitude=record.longitude,
     )
 
+    structured_raw = result.get("structured_answer")
+    structured_answer: Optional[StructuredFollowUpAnswer] = None
+    if isinstance(structured_raw, dict):
+        try:
+            structured_answer = StructuredFollowUpAnswer.model_validate(structured_raw)
+        except Exception:
+            structured_answer = None
+
     answer = result.get("answer", "")
-    await memory_repository.append_followup(body.memory_id, body.question, answer)
+    if structured_answer and structured_answer.summary:
+        answer = structured_answer.summary
+
+    structured_dict = structured_answer.model_dump() if structured_answer else None
+    await memory_repository.append_followup(
+        body.memory_id,
+        body.question,
+        answer,
+        structured_answer=structured_dict,
+    )
 
     return FollowUpResponse(
         memory_id=body.memory_id,
         answer=answer,
-        suggested_followups=result.get("suggested_followups", []),
+        structured_answer=structured_answer,
+        suggested_followups=flatten_followup_suggestions(result),
     )
 
 
@@ -221,6 +272,15 @@ async def get_memory(memory_id: str):
     return {"memory": item, "followups": followups}
 
 
+@router.delete("/memories/{memory_id}")
+async def delete_memory(memory_id: str):
+    record = await memory_repository.delete(memory_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    storage_service.delete_image_files(record.image_filename, record.thumbnail_filename)
+    return {"ok": True, "memory_id": memory_id}
+
+
 @router.get("/agents")
 async def list_agents():
     return {
@@ -230,6 +290,7 @@ async def list_agents():
             {"id": AgentId.DESIGN_CRITIC.value, "name": "设计评论家", "icon": "chair"},
             {"id": AgentId.STYLIST.value, "name": "造型师", "icon": "shirt"},
             {"id": AgentId.FOOD_EXPLORER.value, "name": "美食探索", "icon": "utensils"},
+            {"id": AgentId.FOOD_SCAN.value, "name": "食识拍", "icon": "scan"},
             {"id": AgentId.TEXT_READER.value, "name": "文字解读", "icon": "text"},
             {"id": AgentId.GENERAL_CURIOSITY.value, "name": "好奇心", "icon": "sparkles"},
         ]

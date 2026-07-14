@@ -143,6 +143,95 @@ class VLMService:
     ) -> dict[str, Any]:
         insight_title = insight.get("title", "")
         if self.demo_mode:
+            if agent_id == "food_scan":
+                return {
+                    "answer": (
+                        f"这餐以虾仁、金枪鱼、鸡蛋和牛油果为主，蛋白质来源丰富，"
+                        f"整体适合减脂期适量食用。关于「{question}」：注意控制油浸金枪鱼与酱料钠含量。"
+                    ),
+                    "structured_answer": {
+                        "summary": (
+                            "这餐以虾仁、金枪鱼、鸡蛋和牛油果为主，蛋白质来源丰富，"
+                            "整体适合减脂期适量食用，但需注意调味与碳水比例。"
+                        ),
+                        "sections": [
+                            {
+                                "heading": "减脂期的优劣势分析",
+                                "paragraphs": [
+                                    "虾仁、金枪鱼与鸡蛋提供优质蛋白，牛油果带来健康脂肪；"
+                                    "若配菜为白米饭，建议替换为糙米或花椰菜饭以降低热量。"
+                                ],
+                                "assessments": [
+                                    {
+                                        "tone": "positive",
+                                        "title": "多源蛋白质",
+                                        "body": "虾、鱼、蛋组合提供完整氨基酸，有助于维持肌肉量。",
+                                    },
+                                    {
+                                        "tone": "positive",
+                                        "title": "健康油脂",
+                                        "body": "牛油果有助于平衡饱腹感，并减缓碳水消化速度。",
+                                    },
+                                    {
+                                        "tone": "warning",
+                                        "title": "调味隐患",
+                                        "body": "油浸金枪鱼与海苔碎钠含量偏高，可能造成水肿感。",
+                                    },
+                                ],
+                                "tips": [
+                                    {
+                                        "label": "蛋白质比例",
+                                        "body": "保留海鲜+鸡蛋组合，金枪鱼优先选水浸款。",
+                                    },
+                                    {
+                                        "label": "碳水置换",
+                                        "body": "白米饭换糙米或黑米，增加纤维与 B 族维生素。",
+                                    },
+                                ],
+                                "tips_heading": "优化小窍门",
+                                "tips_lead": "如果你打算长期以此作为减脂餐，可以尝试微调：",
+                            }
+                        ],
+                        "metric_card": {
+                            "title": "饱腹感 VS 热量密度",
+                            "sliders": [
+                                {
+                                    "label": "热量密度",
+                                    "value": 0.35,
+                                    "low_label": "低",
+                                    "high_label": "高",
+                                },
+                                {
+                                    "label": "饱腹感持续",
+                                    "value": 0.78,
+                                    "low_label": "短",
+                                    "high_label": "长",
+                                },
+                            ],
+                            "note": "相比高糖甜点，这餐在减脂效率上明显更优。",
+                        },
+                        "remark": "营养成分为视觉估算，具体数值请以食品标签或专业检测为准。",
+                        "suggestion_groups": [
+                            {
+                                "title": "进阶减脂建议",
+                                "questions": [
+                                    "水浸和油浸金枪鱼热量差多少？",
+                                    "减脂期适合吃哪些低卡酱料？",
+                                    "牛油果一天吃多少比较合适？",
+                                ],
+                            },
+                            {
+                                "title": "附近健康餐厅",
+                                "questions": ["附近有轻食/低卡餐厅吗？"],
+                            },
+                        ],
+                    },
+                    "suggested_followups": [
+                        "水浸和油浸金枪鱼热量差多少？",
+                        "减脂期适合吃哪些低卡酱料？",
+                        "附近有轻食/低卡餐厅吗？",
+                    ],
+                }
             return {
                 "answer": (
                     f"（Demo 模式）关于「{question}」："
@@ -151,7 +240,7 @@ class VLMService:
                 "suggested_followups": ["更多历史背景", "类似风格有哪些", "推荐搜索词"],
             }
 
-        from app.agents.prompts import FOLLOWUP_SYSTEM
+        from app.agents.prompts import FOLLOWUP_SYSTEM, FOOD_SCAN_FOLLOWUP_SYSTEM
 
         caption = image_caption or await self._caption(image_b64, locale)
         user_text = build_followup_user_text(
@@ -164,11 +253,13 @@ class VLMService:
             latitude=latitude,
             longitude=longitude,
         )
+        system_prompt = FOOD_SCAN_FOLLOWUP_SYSTEM if agent_id == "food_scan" else FOLLOWUP_SYSTEM
+        max_tokens = 2000 if agent_id == "food_scan" else 1000
         return await self._chat_json(
             model=settings.llm_model,
-            system_prompt=FOLLOWUP_SYSTEM,
+            system_prompt=system_prompt,
             user_text=user_text,
-            max_tokens=1000,
+            max_tokens=max_tokens,
         )
 
     def _demo_insight(self, locale: str) -> dict[str, Any]:

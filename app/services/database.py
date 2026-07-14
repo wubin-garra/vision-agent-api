@@ -105,22 +105,40 @@ class MemoryRepository:
             )
             return list(result.scalars().all())
 
-    async def append_followup(self, memory_id: str, question: str, answer: str) -> None:
+    async def append_followup(
+        self,
+        memory_id: str,
+        question: str,
+        answer: str,
+        *,
+        structured_answer: Optional[dict] = None,
+    ) -> None:
         async with SessionLocal() as session:
             result = await session.execute(select(MemoryRecord).where(MemoryRecord.id == memory_id))
             record = result.scalar_one_or_none()
             if not record:
                 return
             followups = json.loads(record.followups_json or "[]")
-            followups.append(
-                {
-                    "question": question,
-                    "answer": answer,
-                    "at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
+            entry: dict = {
+                "question": question,
+                "answer": answer,
+                "at": datetime.now(timezone.utc).isoformat(),
+            }
+            if structured_answer:
+                entry["structured_answer"] = structured_answer
+            followups.append(entry)
             record.followups_json = json.dumps(followups, ensure_ascii=False)
             await session.commit()
+
+    async def delete(self, memory_id: str) -> Optional[MemoryRecord]:
+        async with SessionLocal() as session:
+            result = await session.execute(select(MemoryRecord).where(MemoryRecord.id == memory_id))
+            record = result.scalar_one_or_none()
+            if not record:
+                return None
+            await session.delete(record)
+            await session.commit()
+            return record
 
 
 memory_repository = MemoryRepository()

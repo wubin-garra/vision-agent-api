@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,6 +10,7 @@ class AgentId(str, Enum):
     DESIGN_CRITIC = "design_critic"
     STYLIST = "stylist"
     FOOD_EXPLORER = "food_explorer"
+    FOOD_SCAN = "food_scan"
     TEXT_READER = "text_reader"
     GENERAL_CURIOSITY = "general_curiosity"
 
@@ -52,6 +53,32 @@ class ShareCard(BaseModel):
     cta: str = ""
 
 
+class NutritionMacro(BaseModel):
+    current: float
+    goal: float
+    unit: str = "g"
+    emoji: Optional[str] = None
+
+
+class NutritionProfile(BaseModel):
+    calories_current: int
+    calories_goal: int = 2000
+    carbs: NutritionMacro
+    fat: NutritionMacro
+    protein: NutritionMacro
+
+
+class AllergenItem(BaseModel):
+    category: str
+    detail: str
+    emoji: Optional[str] = None
+
+
+class NutritionTip(BaseModel):
+    title: str
+    body: str
+
+
 class StructuredInsight(BaseModel):
     title: str
     category: str
@@ -70,6 +97,11 @@ class StructuredInsight(BaseModel):
     nearby_picks: list[NearbyPick] = Field(default_factory=list)
     explore_chips: ExploreChips = Field(default_factory=ExploreChips)
     share_card: Optional[ShareCard] = None
+    # 食识拍 (food_scan) 营养分析扩展
+    nutrition: Optional[NutritionProfile] = None
+    allergens: list[AllergenItem] = Field(default_factory=list)
+    nutrition_tips: list[NutritionTip] = Field(default_factory=list)
+    diet_summary: Optional[str] = None
 
 
 class SceneClassification(BaseModel):
@@ -87,6 +119,66 @@ class AnalyzeRequest(BaseModel):
     agent_override: Optional[AgentId] = None
 
 
+class FollowUpAssessmentItem(BaseModel):
+    """评估条目：positive=优点（绿圈），warning=隐患（红圈）。"""
+
+    tone: Literal["positive", "warning"]
+    title: str
+    body: str
+
+
+class FollowUpTip(BaseModel):
+    """优化建议：label 为分类名，body 为具体做法。"""
+
+    label: str
+    body: str
+
+
+class FollowUpSection(BaseModel):
+    """追问回答的一个主题分段，可含正文、评估卡、优化建议。"""
+
+    heading: str
+    paragraphs: list[str] = Field(default_factory=list)
+    assessments: list[FollowUpAssessmentItem] = Field(default_factory=list)
+    tips_heading: Optional[str] = "优化小窍门"
+    tips_lead: Optional[str] = None
+    tips: list[FollowUpTip] = Field(default_factory=list)
+
+
+class FollowUpMetricSlider(BaseModel):
+    """0-1 滑条，value 表示在 low/high 之间的位置。"""
+
+    label: str
+    value: float = Field(ge=0.0, le=1.0)
+    low_label: str
+    high_label: str
+
+
+class FollowUpMetricCard(BaseModel):
+    """对比型指标卡，如「饱腹感 VS 热量密度」。"""
+
+    title: str
+    sliders: list[FollowUpMetricSlider] = Field(default_factory=list)
+    note: Optional[str] = None
+
+
+class FollowUpSuggestionGroup(BaseModel):
+    """分组追问芯片，如「进阶减脂建议」。"""
+
+    title: str
+    questions: list[str] = Field(default_factory=list)
+
+
+class StructuredFollowUpAnswer(BaseModel):
+    """食识拍 Chance 风格结构化追问回答。"""
+
+    summary: str
+    sections: list[FollowUpSection] = Field(default_factory=list)
+    metric_card: Optional[FollowUpMetricCard] = None
+    remark: Optional[str] = None
+    suggestion_groups: list[FollowUpSuggestionGroup] = Field(default_factory=list)
+
+
 class FollowUpRequest(BaseModel):
     memory_id: str
     question: str
@@ -96,6 +188,7 @@ class FollowUpRequest(BaseModel):
 class FollowUpResponse(BaseModel):
     memory_id: str
     answer: str
+    structured_answer: Optional[StructuredFollowUpAnswer] = None
     suggested_followups: list[str] = Field(default_factory=list)
 
 

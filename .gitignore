@@ -1,8 +1,12 @@
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
+# Node
+node_modules/
+dist/
+
+# Runtime
 uploads/
 *.db
+*.db-shm
+*.db-wal
 .env
+agent-api.pid
+*.log

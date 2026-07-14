@@ -12,12 +12,85 @@ import {
 } from "./context.js";
 import { visionService } from "./vision.js";
 
-function extractJson(text: string): Record<string, unknown> {
+function stripCodeFence(text: string): string {
   let cleaned = text.trim();
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
   }
-  return JSON.parse(cleaned) as Record<string, unknown>;
+  return cleaned.trim();
+}
+
+/** 尝试修复因 max_tokens 截断导致未闭合的 JSON（尽力而为） */
+function repairTruncatedJson(text: string): string {
+  let s = text.trim();
+  if (!s) return "{}";
+
+  // 若在字符串中间被截断，先闭合引号
+  let inString = false;
+  let escaped = false;
+  for (const ch of s) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') inString = !inString;
+  }
+  if (inString) s += '"';
+
+  const stack: string[] = [];
+  inString = false;
+  escaped = false;
+  for (const ch of s) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") stack.pop();
+  }
+
+  // 去掉尾部悬空逗号
+  s = s.replace(/,\s*$/, "");
+  while (stack.length) {
+    const open = stack.pop();
+    s += open === "{" ? "}" : "]";
+  }
+  return s;
+}
+
+function extractJson(text: string): Record<string, unknown> {
+  const cleaned = stripCodeFence(text);
+  try {
+    return JSON.parse(cleaned) as Record<string, unknown>;
+  } catch (firstError) {
+    try {
+      return JSON.parse(repairTruncatedJson(cleaned)) as Record<string, unknown>;
+    } catch {
+      const preview = cleaned.slice(0, 240).replace(/\s+/g, " ");
+      throw new Error(
+        `模型返回了不完整或非法 JSON（常因输出被截断）。片段: ${preview}…` +
+          ` 原始错误: ${firstError instanceof Error ? firstError.message : String(firstError)}`,
+      );
+    }
+  }
+}
+
+function analyzeMaxTokens(agentId?: string): number {
+  if (agentId === "food_scan" || agentId === "food_explorer") return 3500;
+  return 2200;
 }
 
 export class VlmService {
@@ -46,36 +119,74 @@ export class VlmService {
     systemPrompt: string;
     userText: string;
     maxTokens: number;
+    retryOnTruncation?: boolean;
   }): Promise<Record<string, unknown>> {
     if (!this.client) {
       throw new Error("LLM client not configured");
     }
 
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: input.systemPrompt },
-      { role: "user", content: input.userText },
-    ];
+    const runOnce = async (
+      userText: string,
+      maxTokens: number,
+    ): Promise<{
+      data: Record<string, unknown>;
+      finishReason: string | null | undefined;
+    }> => {
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        { role: "system", content: input.systemPrompt },
+        { role: "user", content: userText },
+      ];
 
-    let response: OpenAI.Chat.ChatCompletion;
+      let response: OpenAI.Chat.ChatCompletion;
+      try {
+        response = await this.client!.chat.completions.create({
+          model: input.model,
+          messages,
+          response_format: { type: "json_object" },
+          max_tokens: maxTokens,
+          ...this.completionExtra(),
+        });
+      } catch {
+        response = await this.client!.chat.completions.create({
+          model: input.model,
+          messages,
+          max_tokens: maxTokens,
+          ...this.completionExtra(),
+        });
+      }
+
+      const choice = response.choices[0];
+      const content = choice?.message?.content ?? "{}";
+      return {
+        data: extractJson(content),
+        finishReason: choice?.finish_reason,
+      };
+    };
+
     try {
-      response = await this.client.chat.completions.create({
-        model: input.model,
-        messages,
-        response_format: { type: "json_object" },
-        max_tokens: input.maxTokens,
-        ...this.completionExtra(),
-      });
-    } catch {
-      response = await this.client.chat.completions.create({
-        model: input.model,
-        messages,
-        max_tokens: input.maxTokens,
-        ...this.completionExtra(),
-      });
+      const first = await runOnce(input.userText, input.maxTokens);
+      if (
+        input.retryOnTruncation &&
+        first.finishReason === "length"
+      ) {
+        // 虽可能已修复截断 JSON，但仍再请求一次更精简的完整输出
+        const retry = await runOnce(
+          input.userText +
+            "\n\n注意：请输出更精简但仍完整合法的 JSON，务必闭合所有字符串与括号，不要截断。",
+          Math.min(input.maxTokens + 1000, 4500),
+        );
+        return retry.data;
+      }
+      return first.data;
+    } catch (err) {
+      if (!input.retryOnTruncation) throw err;
+      const retry = await runOnce(
+        input.userText +
+          "\n\n注意：上次 JSON 解析失败。请重新输出完整合法 JSON，字段尽量精简，务必闭合所有字符串与括号。",
+        Math.min(input.maxTokens + 1000, 4500),
+      );
+      return retry.data;
     }
-
-    const content = response.choices[0]?.message?.content ?? "{}";
-    return extractJson(content);
   }
 
   private async caption(
@@ -97,6 +208,7 @@ export class VlmService {
     imageCaption?: string | null;
     latitude?: number | null;
     longitude?: number | null;
+    agentId?: string;
   }): Promise<Record<string, unknown>> {
     const locale = input.locale ?? "zh-CN";
     if (this.demoMode) {
@@ -116,7 +228,8 @@ export class VlmService {
       model: input.model ?? settings.llmModel,
       systemPrompt: input.systemPrompt,
       userText,
-      maxTokens: 1500,
+      maxTokens: analyzeMaxTokens(input.agentId),
+      retryOnTruncation: true,
     });
   }
 
@@ -191,7 +304,8 @@ export class VlmService {
       model: settings.llmModel,
       systemPrompt: isFoodScan ? FOOD_SCAN_FOLLOWUP_SYSTEM : FOLLOWUP_SYSTEM,
       userText,
-      maxTokens: isFoodScan ? 2000 : 1000,
+      maxTokens: isFoodScan ? 3500 : 1500,
+      retryOnTruncation: true,
     });
   }
 

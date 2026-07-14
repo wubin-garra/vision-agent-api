@@ -59,9 +59,19 @@ export class InsightPlanner {
       imageCaption: input.imageCaption,
       latitude: input.latitude,
       longitude: input.longitude,
+      agentId: input.agentId,
     });
     raw.agent_id = input.agentId;
-    return structuredInsightSchema.parse(raw);
+    const parsed = structuredInsightSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(
+        `洞察结构校验失败: ${parsed.error.issues
+          .slice(0, 3)
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ")}`,
+      );
+    }
+    return parsed.data;
   }
 }
 

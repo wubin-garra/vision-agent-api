@@ -24,6 +24,7 @@ import {
 import { storageService } from "../services/storage.js";
 import { visionService } from "../services/vision.js";
 import { vlmService } from "../services/vlm.js";
+import { settings } from "../config.js";
 
 const FOOD_SCAN_THINKING_STEPS = [
   "检查图像是否包含食物",
@@ -127,6 +128,92 @@ function sendSse(
   reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+function timedLog(label: string, started: number): void {
+  if (!settings.debug) return;
+  console.log(`[analyze] ${label} ${Date.now() - started}ms`);
+}
+
+/**
+ * 有 override：fast caption ∥ vision insight
+ * 无 override：fast caption → router → vision insight
+ */
+async function runAnalyzePipeline(input: {
+  imageBytes: Buffer;
+  locale: string;
+  latitude?: number;
+  longitude?: number;
+  agentOverride?: ReturnType<typeof parseAgentOverride>;
+  onStage?: (stage: string) => void;
+  onAgent?: (agentId: AgentId) => void;
+}): Promise<{ caption: string; agentId: AgentId; insight: StructuredInsight }> {
+  const imageB64 = input.imageBytes.toString("base64");
+  const pipelineStarted = Date.now();
+
+  if (input.agentOverride) {
+    input.onStage?.("analyzing");
+    input.onAgent?.(input.agentOverride);
+    const captionStarted = Date.now();
+    const insightStarted = Date.now();
+    const [caption, insight] = await Promise.all([
+      visionService
+        .describeImageFast(imageB64, input.locale, input.imageBytes)
+        .then((c) => {
+          timedLog("fast_caption", captionStarted);
+          return c;
+        }),
+      insightPlanner
+        .analyze({
+          imageBytes: input.imageBytes,
+          agentId: input.agentOverride,
+          locale: input.locale,
+          imageCaption: null,
+          latitude: input.latitude,
+          longitude: input.longitude,
+        })
+        .then((i) => {
+          timedLog("insight", insightStarted);
+          return i;
+        }),
+    ]);
+    timedLog("pipeline_override_total", pipelineStarted);
+    return { caption, agentId: input.agentOverride, insight };
+  }
+
+  input.onStage?.("captioning");
+  const captionStarted = Date.now();
+  const caption = await visionService.describeImageFast(
+    imageB64,
+    input.locale,
+    input.imageBytes,
+  );
+  timedLog("fast_caption", captionStarted);
+
+  input.onStage?.("routing");
+  const routeStarted = Date.now();
+  const agentId = await sceneRouter.route({
+    imageBytes: input.imageBytes,
+    agentOverride: null,
+    imageCaption: caption,
+  });
+  timedLog("route", routeStarted);
+  input.onAgent?.(agentId);
+
+  input.onStage?.("analyzing");
+  const insightStarted = Date.now();
+  const insight = await insightPlanner.analyze({
+    imageBytes: input.imageBytes,
+    agentId,
+    locale: input.locale,
+    imageCaption: caption,
+    latitude: input.latitude,
+    longitude: input.longitude,
+  });
+  timedLog("insight", insightStarted);
+  timedLog("pipeline_auto_total", pipelineStarted);
+
+  return { caption, agentId, insight };
+}
+
 export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
   app.post("/analyze", async (request, reply) => {
     const form = await readMultipartAnalyze(request);
@@ -134,25 +221,12 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
     const { filename, processed } = await storageService.saveImage(form.image);
     const thumbFilename = filename.replace(".jpg", "_thumb.jpg");
 
-    const imageB64 = processed.toString("base64");
-    const caption = await visionService.describeImage(
-      imageB64,
-      form.locale,
-      processed,
-    );
-
-    const agentId = await sceneRouter.route({
+    const { caption, agentId, insight } = await runAnalyzePipeline({
       imageBytes: processed,
-      agentOverride: override,
-      imageCaption: caption,
-    });
-    const insight = await insightPlanner.analyze({
-      imageBytes: processed,
-      agentId,
       locale: form.locale,
-      imageCaption: caption,
       latitude: form.latitude,
       longitude: form.longitude,
+      agentOverride: override,
     });
 
     const record = memoryRepository.create({
@@ -170,7 +244,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
 
     return {
       memory_id: record.id,
-      agent_id: insight.agent_id,
+      agent_id: agentId,
       followup_chips: resolveFollowupChips(insight),
       insight,
       image_url: `/uploads/${filename}`,
@@ -192,36 +266,28 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
     });
 
     try {
-      sendSse(reply, "status", { stage: "captioning" });
+      let caption = "";
+      let agentId: AgentId = AgentId.GENERAL_CURIOSITY;
 
-      const imageB64 = processed.toString("base64");
-      const caption = await visionService.describeImage(
-        imageB64,
-        form.locale,
-        processed,
-      );
+      const analyzePromise = (async () => {
+        const result = await runAnalyzePipeline({
+          imageBytes: processed,
+          locale: form.locale,
+          latitude: form.latitude,
+          longitude: form.longitude,
+          agentOverride: override,
+          onStage: (stage) => sendSse(reply, "status", { stage }),
+          onAgent: (id) => {
+            agentId = id;
+            sendSse(reply, "agent", { agent_id: id });
+          },
+        });
+        caption = result.caption;
+        agentId = result.agentId;
+        return result.insight;
+      })();
 
-      sendSse(reply, "status", { stage: "routing" });
-
-      const agentId = await sceneRouter.route({
-        imageBytes: processed,
-        agentOverride: override,
-        imageCaption: caption,
-      });
-      sendSse(reply, "agent", { agent_id: agentId });
-
-      sendSse(reply, "status", { stage: "analyzing" });
-
-      const analyzePromise = insightPlanner.analyze({
-        imageBytes: processed,
-        agentId,
-        locale: form.locale,
-        imageCaption: caption,
-        latitude: form.latitude,
-        longitude: form.longitude,
-      });
-
-      if (agentId === AgentId.FOOD_SCAN) {
+      if (override === AgentId.FOOD_SCAN) {
         let analyzeDone = false;
         void analyzePromise.then(() => {
           analyzeDone = true;
@@ -259,7 +325,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
 
       sendSse(reply, "complete", {
         memory_id: record.id,
-        agent_id: insight.agent_id,
+        agent_id: agentId,
         followup_chips: resolveFollowupChips(insight),
         insight,
         image_url: `/uploads/${filename}`,

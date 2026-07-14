@@ -6,91 +6,30 @@ import {
   ROUTER_SYSTEM,
 } from "../agents/prompts.js";
 import { settings } from "../config.js";
+import { extractJson } from "../utils/jsonExtract.js";
 import {
   buildAnalyzeUserText,
   buildFollowupUserText,
+  formatGeoContext,
 } from "./context.js";
 import { visionService } from "./vision.js";
 
-function stripCodeFence(text: string): string {
-  let cleaned = text.trim();
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  }
-  return cleaned.trim();
-}
-
-/** 尝试修复因 max_tokens 截断导致未闭合的 JSON（尽力而为） */
-function repairTruncatedJson(text: string): string {
-  let s = text.trim();
-  if (!s) return "{}";
-
-  // 若在字符串中间被截断，先闭合引号
-  let inString = false;
-  let escaped = false;
-  for (const ch of s) {
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (ch === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (ch === '"') inString = !inString;
-  }
-  if (inString) s += '"';
-
-  const stack: string[] = [];
-  inString = false;
-  escaped = false;
-  for (const ch of s) {
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (ch === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (ch === "{" || ch === "[") stack.push(ch);
-    else if (ch === "}" || ch === "]") stack.pop();
-  }
-
-  // 去掉尾部悬空逗号
-  s = s.replace(/,\s*$/, "");
-  while (stack.length) {
-    const open = stack.pop();
-    s += open === "{" ? "}" : "]";
-  }
-  return s;
-}
-
-function extractJson(text: string): Record<string, unknown> {
-  const cleaned = stripCodeFence(text);
-  try {
-    return JSON.parse(cleaned) as Record<string, unknown>;
-  } catch (firstError) {
-    try {
-      return JSON.parse(repairTruncatedJson(cleaned)) as Record<string, unknown>;
-    } catch {
-      const preview = cleaned.slice(0, 240).replace(/\s+/g, " ");
-      throw new Error(
-        `模型返回了不完整或非法 JSON（常因输出被截断）。片段: ${preview}…` +
-          ` 原始错误: ${firstError instanceof Error ? firstError.message : String(firstError)}`,
-      );
-    }
-  }
-}
-
 function analyzeMaxTokens(agentId?: string): number {
-  if (agentId === "food_scan" || agentId === "food_explorer") return 3500;
-  return 2200;
+  if (agentId === "food_scan" || agentId === "food_explorer") return 2500;
+  return 2000;
+}
+
+function buildVisionAnalyzeUserText(input: {
+  locale: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}): string {
+  return (
+    `Locale: ${input.locale}\n` +
+    `${formatGeoContext(input.latitude, input.longitude)}\n\n` +
+    "请直接根据图片输出结构化 JSON 洞察。字段尽量精简，narrative 与 tips 简明扼要。" +
+    "只输出合法 JSON，务必闭合所有字符串与括号。"
+  );
 }
 
 export class VlmService {
@@ -119,7 +58,8 @@ export class VlmService {
     systemPrompt: string;
     userText: string;
     maxTokens: number;
-    retryOnTruncation?: boolean;
+    /** 仅在 JSON 解析失败时重试一次 */
+    retryOnParseError?: boolean;
   }): Promise<Record<string, unknown>> {
     if (!this.client) {
       throw new Error("LLM client not configured");
@@ -128,10 +68,7 @@ export class VlmService {
     const runOnce = async (
       userText: string,
       maxTokens: number,
-    ): Promise<{
-      data: Record<string, unknown>;
-      finishReason: string | null | undefined;
-    }> => {
+    ): Promise<Record<string, unknown>> => {
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         { role: "system", content: input.systemPrompt },
         { role: "user", content: userText },
@@ -155,37 +92,19 @@ export class VlmService {
         });
       }
 
-      const choice = response.choices[0];
-      const content = choice?.message?.content ?? "{}";
-      return {
-        data: extractJson(content),
-        finishReason: choice?.finish_reason,
-      };
+      const content = response.choices[0]?.message?.content ?? "{}";
+      return extractJson(content);
     };
 
     try {
-      const first = await runOnce(input.userText, input.maxTokens);
-      if (
-        input.retryOnTruncation &&
-        first.finishReason === "length"
-      ) {
-        // 虽可能已修复截断 JSON，但仍再请求一次更精简的完整输出
-        const retry = await runOnce(
-          input.userText +
-            "\n\n注意：请输出更精简但仍完整合法的 JSON，务必闭合所有字符串与括号，不要截断。",
-          Math.min(input.maxTokens + 1000, 4500),
-        );
-        return retry.data;
-      }
-      return first.data;
+      return await runOnce(input.userText, input.maxTokens);
     } catch (err) {
-      if (!input.retryOnTruncation) throw err;
-      const retry = await runOnce(
+      if (!input.retryOnParseError) throw err;
+      return runOnce(
         input.userText +
           "\n\n注意：上次 JSON 解析失败。请重新输出完整合法 JSON，字段尽量精简，务必闭合所有字符串与括号。",
-        Math.min(input.maxTokens + 1000, 4500),
+        Math.min(input.maxTokens + 500, 3200),
       );
-      return retry.data;
     }
   }
 
@@ -193,11 +112,12 @@ export class VlmService {
     imageB64: string,
     locale: string,
     imageBytes?: Buffer,
+    mode: "full" | "fast" = "fast",
   ): Promise<string> {
     if (this.demoMode) {
       return "（Demo）一张日常场景照片，包含可识别的物体与细节。";
     }
-    return visionService.describeImage(imageB64, locale, imageBytes);
+    return visionService.describeImage(imageB64, locale, imageBytes, mode);
   }
 
   async analyzeImage(input: {
@@ -215,8 +135,60 @@ export class VlmService {
       return this.demoInsight(locale);
     }
 
+    const maxTokens = analyzeMaxTokens(input.agentId);
+
+    // 主路径：视觉多模态直出 insight（看图，省去 DeepSeek 二次推理）
+    if (visionService.enabled) {
+      const userText = buildVisionAnalyzeUserText({
+        locale,
+        latitude: input.latitude,
+        longitude: input.longitude,
+      });
+      const runVision = (text: string) =>
+        visionService.analyzeImageJson({
+          imageB64: input.imageB64,
+          systemPrompt: input.systemPrompt,
+          userText: text,
+          maxTokens,
+        });
+
+      try {
+        const started = Date.now();
+        try {
+          const raw = await runVision(userText);
+          if (settings.debug) {
+            console.log(
+              `[analyze] vision oneshot ok in ${Date.now() - started}ms agent=${input.agentId ?? "?"}`,
+            );
+          }
+          return raw;
+        } catch (parseErr) {
+          // 仅解析失败时重试一次（更精简）
+          const raw = await runVision(
+            userText +
+              "\n\n注意：上次 JSON 解析失败。请输出更精简但仍完整的合法 JSON。",
+          );
+          if (settings.debug) {
+            console.log(
+              `[analyze] vision oneshot retry ok in ${Date.now() - started}ms`,
+            );
+          }
+          void parseErr;
+          return raw;
+        }
+      } catch (err) {
+        if (settings.debug) {
+          console.warn(
+            `[analyze] vision oneshot failed, fallback to text LLM:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    }
+
     const caption =
-      input.imageCaption ?? (await this.caption(input.imageB64, locale));
+      input.imageCaption ??
+      (await this.caption(input.imageB64, locale, undefined, "fast"));
     const userText = buildAnalyzeUserText({
       locale,
       caption,
@@ -228,8 +200,8 @@ export class VlmService {
       model: input.model ?? settings.llmModel,
       systemPrompt: input.systemPrompt,
       userText,
-      maxTokens: analyzeMaxTokens(input.agentId),
-      retryOnTruncation: true,
+      maxTokens,
+      retryOnParseError: true,
     });
   }
 
@@ -248,7 +220,8 @@ export class VlmService {
     }
 
     const caption =
-      input.imageCaption ?? (await this.caption(input.imageB64, "zh-CN"));
+      input.imageCaption ??
+      (await this.caption(input.imageB64, "zh-CN", undefined, "fast"));
     const userText =
       `图片视觉描述：\n${caption}\n\n` + "请根据描述分类场景。只输出 JSON。";
 
@@ -287,7 +260,8 @@ export class VlmService {
     }
 
     const caption =
-      input.imageCaption ?? (await this.caption(input.imageB64, locale));
+      input.imageCaption ??
+      (await this.caption(input.imageB64, locale, undefined, "fast"));
     const userText = buildFollowupUserText({
       locale,
       caption,
@@ -304,8 +278,8 @@ export class VlmService {
       model: settings.llmModel,
       systemPrompt: isFoodScan ? FOOD_SCAN_FOLLOWUP_SYSTEM : FOLLOWUP_SYSTEM,
       userText,
-      maxTokens: isFoodScan ? 3500 : 1500,
-      retryOnTruncation: true,
+      maxTokens: isFoodScan ? 2500 : 1500,
+      retryOnParseError: true,
     });
   }
 

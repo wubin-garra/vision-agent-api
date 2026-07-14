@@ -2,6 +2,12 @@
 node_modules/
 dist/
 
+# Python leftovers
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
 # Runtime
 uploads/
 *.db

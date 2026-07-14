@@ -298,8 +298,8 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
       imageCaption: record.image_caption || null,
       followupHistory,
       agentId: record.agent_id,
-      latitude: record.latitude,
-      longitude: record.longitude,
+      latitude: body.latitude ?? record.latitude,
+      longitude: body.longitude ?? record.longitude,
     });
 
     const structuredParsed = structuredFollowUpAnswerSchema.safeParse(

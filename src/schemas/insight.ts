@@ -189,6 +189,8 @@ export const followUpRequestSchema = z.object({
   memory_id: z.string().min(1),
   question: z.string().min(1),
   locale: z.string().default("zh-CN"),
+  latitude: z.number().finite().optional(),
+  longitude: z.number().finite().optional(),
 });
 
 export type FollowUpRequest = z.infer<typeof followUpRequestSchema>;

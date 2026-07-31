@@ -24,25 +24,29 @@ import {
 import { storageService } from "../services/storage.js";
 import { visionService } from "../services/vision.js";
 import { vlmService } from "../services/vlm.js";
+import { resolvePalmPaths } from "../services/palmGeometry.js";
+import { sanitizePalmInsight } from "../agents/palmSanitize.js";
 import { settings } from "../config.js";
 
 const FOOD_SCAN_THINKING_STEPS = [
+  "上传并压缩图片",
   "检查图像是否包含食物",
   "识别主要食材与份量",
   "估算热量与三大营养素",
   "生成饮食建议与过敏提示",
 ];
 
-const FOOD_SCAN_THINKING_STEP_DELAYS_MS = [2800, 3000, 3200, 0];
+const FOOD_SCAN_THINKING_STEP_DELAYS_MS = [2800, 5200, 5600, 6000, 0];
 
 const PALM_READER_THINKING_STEPS = [
+  "上传掌心照片",
   "确认画面中的掌心与主线",
   "描摹感情线、智慧线与生命线",
   "解读事业线与性格光谱",
   "结合生日生成专属洞察",
 ];
 
-const PALM_READER_THINKING_STEP_DELAYS_MS = [2800, 3200, 3400, 0];
+const PALM_READER_THINKING_STEP_DELAYS_MS = [2800, 5200, 5600, 6000, 0];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -177,19 +181,34 @@ async function runAnalyzePipeline(input: {
 
     input.onStage?.("analyzing");
     const insightStarted = Date.now();
-    const insight = await insightPlanner.analyze({
-      imageBytes: input.imageBytes,
-      agentId: input.agentOverride,
-      locale: input.locale,
-      imageCaption: caption,
-      latitude: input.latitude,
-      longitude: input.longitude,
-      birthday: input.birthday,
-      qualityMode: true,
-    });
+    const geometryPromise =
+      input.agentOverride === AgentId.PALM_READER
+        ? resolvePalmPaths(input.imageBytes)
+        : Promise.resolve(null);
+    const [insight, geometry] = await Promise.all([
+      insightPlanner.analyze({
+        imageBytes: input.imageBytes,
+        agentId: input.agentOverride,
+        locale: input.locale,
+        imageCaption: caption,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        birthday: input.birthday,
+        qualityMode: true,
+      }),
+      geometryPromise,
+    ]);
     timedLog("insight_quality", insightStarted);
     timedLog("pipeline_override_total", pipelineStarted);
-    return { caption, agentId: input.agentOverride, insight };
+    const finalInsight = geometry
+      ? sanitizePalmInsight(insight, geometry.paths)
+      : insight;
+    if (geometry) {
+      console.log(
+        `[analyze] palm_geometry source=${geometry.source} (parallel with insight)`,
+      );
+    }
+    return { caption, agentId: input.agentOverride, insight: finalInsight };
   }
 
   input.onStage?.("captioning");
@@ -213,20 +232,35 @@ async function runAnalyzePipeline(input: {
 
   input.onStage?.("analyzing");
   const insightStarted = Date.now();
-  const insight = await insightPlanner.analyze({
-    imageBytes: input.imageBytes,
-    agentId,
-    locale: input.locale,
-    imageCaption: caption,
-    latitude: input.latitude,
-    longitude: input.longitude,
-    birthday: input.birthday,
-    qualityMode: false,
-  });
+  const geometryPromise =
+    agentId === AgentId.PALM_READER
+      ? resolvePalmPaths(input.imageBytes)
+      : Promise.resolve(null);
+  const [insight, geometry] = await Promise.all([
+    insightPlanner.analyze({
+      imageBytes: input.imageBytes,
+      agentId,
+      locale: input.locale,
+      imageCaption: caption,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      birthday: input.birthday,
+      qualityMode: false,
+    }),
+    geometryPromise,
+  ]);
   timedLog("insight", insightStarted);
   timedLog("pipeline_auto_total", pipelineStarted);
 
-  return { caption, agentId, insight };
+  const finalInsight = geometry
+    ? sanitizePalmInsight(insight, geometry.paths)
+    : insight;
+  if (geometry) {
+    console.log(
+      `[analyze] palm_geometry source=${geometry.source} (parallel with insight)`,
+    );
+  }
+  return { caption, agentId, insight: finalInsight };
 }
 
 export async function analyzeRoutes(app: FastifyInstance): Promise<void> {

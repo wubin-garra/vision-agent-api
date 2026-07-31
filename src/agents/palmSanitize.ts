@@ -1,4 +1,5 @@
 import type { StructuredInsight } from "../schemas/insight.js";
+import type { PalmPathMap } from "../services/palmGeometry.js";
 
 const UNKNOWN_RE =
   /未知|未确定|未发现|尚待确认|未观察|不确定位|无法识别|看不清|暂无/;
@@ -19,9 +20,10 @@ function fallbackTrait(label: string, clues: string[]): string {
   return DEFAULT_TRAITS[label] ?? DEFAULT_TRAITS["独特标记"]!;
 }
 
-/** 掌心图仍输出「未知」时，用可见线索或温和默认值补齐，避免空结果卡 */
+/** 掌心图仍输出「未知」时，用可见线索或温和默认值补齐；可选注入几何 path */
 export function sanitizePalmInsight(
   insight: StructuredInsight,
+  geometryPaths?: PalmPathMap | null,
 ): StructuredInsight {
   if (insight.agent_id !== "palm_reader" || !insight.palm_reading) {
     return insight;
@@ -37,7 +39,6 @@ export function sanitizePalmInsight(
     return trait;
   });
 
-  // 确保三条摘要存在
   const labels = ["手型", "核心纹路", "独特标记"] as const;
   const ensured = labels.map((label) => {
     const existing = traits.find((t) => t.label === label);
@@ -46,11 +47,48 @@ export function sanitizePalmInsight(
     }
     return {
       label,
-      value: existing?.value && !UNKNOWN_RE.test(existing.value)
-        ? existing.value
-        : fallbackTrait(label, clues),
+      value:
+        existing?.value && !UNKNOWN_RE.test(existing.value)
+          ? existing.value
+          : fallbackTrait(label, clues),
     };
   });
+
+  const palmLines = (reading.palm_lines ?? []).map((line) => {
+    const geo = geometryPaths?.[line.id as keyof PalmPathMap];
+    if (geo && geo.length >= 2) {
+      return { ...line, path: geo };
+    }
+    return line;
+  });
+
+  if (geometryPaths) {
+    const ids = ["heart", "head", "life", "career"] as const;
+    const names: Record<(typeof ids)[number], string> = {
+      heart: "感情线",
+      head: "智慧线",
+      life: "生命线",
+      career: "事业线",
+    };
+    const colors: Record<(typeof ids)[number], string> = {
+      heart: "#E85D5D",
+      head: "#4A9FE8",
+      life: "#3DB88A",
+      career: "#F0A04B",
+    };
+    for (const id of ids) {
+      if (!palmLines.some((l) => l.id === id)) {
+        palmLines.push({
+          id,
+          name: names[id],
+          color: colors[id],
+          highlight: "人生节奏仍在展开",
+          description: "主线形态清晰可辨，指向稳定而持续的内在节奏。",
+          path: geometryPaths[id],
+        });
+      }
+    }
+  }
 
   return {
     ...insight,
@@ -58,6 +96,7 @@ export function sanitizePalmInsight(
     palm_reading: {
       ...reading,
       summary_traits: ensured,
+      palm_lines: palmLines,
     },
   };
 }

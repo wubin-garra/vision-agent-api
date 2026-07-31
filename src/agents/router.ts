@@ -95,6 +95,7 @@ export class InsightPlanner {
           .join("; ")}`,
       );
     }
+    // 几何 path 在 pipeline 层注入；此处只做文案兜底
     if (input.agentId === AgentId.PALM_READER) {
       return sanitizePalmInsight(parsed.data);
     }

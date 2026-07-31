@@ -1,4 +1,5 @@
 import { AGENT_PROMPTS, SCENE_TO_AGENT } from "./prompts.js";
+import { sanitizePalmInsight } from "./palmSanitize.js";
 import {
   AgentId,
   agentIdSchema,
@@ -75,6 +76,9 @@ export class InsightPlanner {
           .map((i) => `${i.path.join(".")}: ${i.message}`)
           .join("; ")}`,
       );
+    }
+    if (input.agentId === AgentId.PALM_READER) {
+      return sanitizePalmInsight(parsed.data);
     }
     return parsed.data;
   }

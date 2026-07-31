@@ -47,7 +47,10 @@ function buildVisionAnalyzeUserText(input: {
 }): string {
   const palmHint =
     input.agentId === "palm_reader"
-      ? "\n\n这是手相分析：请仔细看清掌心真实纹路沟壑，为 heart/head/life/career 各输出 6–8 个贴合可见沟壑的 path 点（0–100 百分比，左上为原点）。禁止使用固定模板坐标。"
+      ? "\n\n这是手相分析：请仔细看清掌心真实纹路沟壑。" +
+        "summary_traits 禁止「未知/未确定/未发现」；掌心主体清晰时必须给出具体手型、主线形态与至少一个标记。" +
+        "为 heart/head/life/career 各输出 6–8 个贴合本照片可见沟壑的 path 点（0–100，左上为原点）。" +
+        "禁止使用固定模板或示例坐标，每条线必须因图而异。"
       : "";
   const captionHint = input.imageCaption
     ? `\n参考视觉描述（可校正）：\n${input.imageCaption}\n`

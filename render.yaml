@@ -4,7 +4,9 @@
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm ci && npm run build
+    # Render 构建阶段常带 NODE_ENV=production，npm 会跳过 devDependencies；
+    # typescript / @types/* 在 devDependencies，必须 --include=dev 才能 tsc。
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: node dist/index.js
     healthCheckPath: /health
     autoDeploy: true
@@ -13,6 +15,8 @@
         value: 0.0.0.0
       - key: DEBUG
         value: "false"
+      - key: NODE_ENV
+        value: production
       - key: LLM_PROVIDER
         value: deepseek
       - key: DEEPSEEK_API_KEY

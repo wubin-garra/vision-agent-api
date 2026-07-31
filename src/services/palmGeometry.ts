@@ -8,7 +8,14 @@ import { snapPathsToCreases } from "./palmCreaseSnap.js";
 
 export type PalmPoint = { x: number; y: number };
 export type PalmLineId = "heart" | "head" | "life" | "career";
-export type PalmPathMap = Record<PalmLineId, PalmPoint[]>;
+
+/** heart/head/life 必有；career 仅在检测到明显纵向纹理时存在 */
+export type PalmPathMap = {
+  heart: PalmPoint[];
+  head: PalmPoint[];
+  life: PalmPoint[];
+  career?: PalmPoint[];
+};
 
 /** MediaPipe Hands 关键点索引 */
 const LM = {
@@ -22,6 +29,26 @@ const LM = {
 } as const;
 
 type Landmark = { x: number; y: number };
+
+/** 掌坐标系：用于 ROI 与初值（归一化 0–1 图像坐标） */
+export type PalmFrame = {
+  wrist: Landmark;
+  fingerBase: Landmark;
+  palmCenter: Landmark;
+  /** 指根 → 腕，单位向量 */
+  down: Landmark;
+  /** 小指 → 食指方向的单位向量（across 指向食指侧） */
+  across: Landmark;
+  palmW: number;
+  palmH: number;
+  huKou: Landmark;
+  indexMcp: Landmark;
+  middleMcp: Landmark;
+  ringMcp: Landmark;
+  pinkyMcp: Landmark;
+  thumbMcp: Landmark;
+  thumbCmc: Landmark;
+};
 
 let detectorPromise: Promise<handPoseDetection.HandDetector> | null = null;
 
@@ -99,15 +126,8 @@ function samplePolyline(points: Landmark[], count = 7): PalmPoint[] {
   return out;
 }
 
-/**
- * 用 21 关键点生成四条主线（示意线，贴掌形解剖位置）。
- *
- * - 感情线：紧贴四指 MCP 根部下方的上方横纹
- * - 智慧线：掌中部，与感情线明显分离，多起于虎口
- * - 生命线：上端接虎口，绕拇指丘落到腕侧
- * - 事业线：腕→中指方向的柔和曲线，止于智慧线下方
- */
-export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
+/** 从关键点构建掌坐标系 */
+export function buildPalmFrame(landmarks: Landmark[]): PalmFrame {
   const wrist = landmarks[LM.wrist]!;
   const thumbMcp = landmarks[LM.thumbMcp]!;
   const thumbCmc = landmarks[LM.thumbCmc]!;
@@ -134,7 +154,6 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
     x: acrossRaw.x / acrossLen,
     y: acrossRaw.y / acrossLen,
   };
-  const toPinky = { x: -across.x, y: -across.y };
 
   const fingerBase = lerp(
     lerp(indexMcp, middleMcp, 0.5),
@@ -142,48 +161,126 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
     0.5,
   );
   const palmCenter = lerp(wrist, fingerBase, 0.45);
+  const inset = (p: Landmark, amount = 0.12): Landmark =>
+    lerp(p, palmCenter, amount);
+  const huKou = inset(lerp(indexMcp, thumbMcp, 0.52), 0.06);
+
+  return {
+    wrist,
+    fingerBase,
+    palmCenter,
+    down,
+    across,
+    palmW,
+    palmH,
+    huKou,
+    indexMcp,
+    middleMcp,
+    ringMcp,
+    pinkyMcp,
+    thumbMcp,
+    thumbCmc,
+  };
+}
+
+/** 无关键点时的近似掌坐标系（画面中部掌区） */
+export function buildFallbackFrame(): PalmFrame {
+  const box = { left: 0.22, top: 0.18, right: 0.78, bottom: 0.88 };
+  const midX = (box.left + box.right) / 2;
+  const wrist = { x: midX, y: box.bottom };
+  const fingerBase = { x: midX, y: box.top };
+  const palmH = box.bottom - box.top;
+  const palmW = box.right - box.left;
+  return {
+    wrist,
+    fingerBase,
+    palmCenter: { x: midX, y: (box.top + box.bottom) / 2 },
+    down: { x: 0, y: 1 },
+    across: { x: 1, y: 0 },
+    palmW,
+    palmH,
+    huKou: { x: box.left + palmW * 0.28, y: box.top + palmH * 0.3 },
+    indexMcp: { x: box.left + palmW * 0.22, y: box.top },
+    middleMcp: { x: midX, y: box.top },
+    ringMcp: { x: box.left + palmW * 0.68, y: box.top },
+    pinkyMcp: { x: box.right, y: box.top + palmH * 0.02 },
+    thumbMcp: { x: box.left + palmW * 0.08, y: box.top + palmH * 0.35 },
+    thumbCmc: { x: box.left + palmW * 0.12, y: box.top + palmH * 0.55 },
+  };
+}
+
+/**
+ * 用 21 关键点生成四条主线解剖初值（示意线，落在生理搜索带内）。
+ *
+ * - 感情线：四指根下方，掌高 20%～40%（中心约 30%）
+ * - 智慧线：虎口起横贯，掌高 35%～60%
+ * - 生命线：虎口 → 拇指球外缘 → 腕侧
+ * - 事业线：腕中 → 中指方向近直弧（无人造 wobble）；是否保留由 crease 门控决定
+ */
+export function buildPathsFromLandmarks(landmarks: Landmark[]): {
+  paths: PalmPathMap;
+  frame: PalmFrame;
+} {
+  const frame = buildPalmFrame(landmarks);
+  const {
+    down,
+    across,
+    palmH,
+    palmW,
+    palmCenter,
+    huKou,
+    indexMcp,
+    middleMcp,
+    ringMcp,
+    pinkyMcp,
+    thumbMcp,
+    thumbCmc,
+    wrist,
+  } = frame;
 
   const inset = (p: Landmark, amount = 0.12): Landmark =>
     lerp(p, palmCenter, amount);
   const along = (p: Landmark, dx: number, dy: number): Landmark =>
     add(p, dx, dy);
 
-  // 虎口：食指 MCP ↔ 拇指 MCP
-  const huKou = inset(lerp(indexMcp, thumbMcp, 0.52), 0.06);
-
-  // —— 感情线：紧贴四指根下方（仅下沉约 8–12% 掌高）——
-  const heartD = palmH * 0.1;
+  // —— 感情线：掌高 20%～40%，中心约 0.30；小指侧 → 食指侧 ——
+  const heartD = palmH * 0.3;
+  const heartArc = palmH * 0.04; // 轻微上弧，更贴近生理感情线
   const heartStart = inset(
-    along(pinkyMcp, down.x * heartD * 0.85, down.y * heartD * 0.85),
-    0.05,
+    along(pinkyMcp, down.x * heartD * 0.92, down.y * heartD * 0.92),
+    0.06,
   );
   const heartMid1 = inset(
-    along(lerp(pinkyMcp, ringMcp, 0.55), down.x * heartD, down.y * heartD),
-    0.04,
+    along(
+      lerp(pinkyMcp, ringMcp, 0.55),
+      down.x * (heartD - heartArc),
+      down.y * (heartD - heartArc),
+    ),
+    0.05,
   );
   const heartMid2 = inset(
     along(
       lerp(ringMcp, middleMcp, 0.45),
-      down.x * heartD * 1.05,
-      down.y * heartD * 1.05,
+      down.x * (heartD - heartArc * 1.2),
+      down.y * (heartD - heartArc * 1.2),
     ),
-    0.03,
+    0.04,
   );
   const heartEnd = inset(
     along(
       lerp(indexMcp, middleMcp, 0.28),
-      down.x * heartD * 0.75,
-      down.y * heartD * 0.75,
+      down.x * heartD * 0.88,
+      down.y * heartD * 0.88,
     ),
-    0.05,
+    0.06,
   );
 
-  // —— 智慧线：掌中横纹，整体比感情线低约 0.26 掌高，末端略斜向腕 ——
-  const headD = palmH * 0.36;
-  const headStart = along(huKou, down.x * palmH * 0.04, down.y * palmH * 0.04);
+  // —— 智慧线：虎口起，掌高约 0.45 中心，落在 35%～60% ——
+  const headD = palmH * 0.46;
+  const headStart = along(huKou, down.x * palmH * 0.14, down.y * palmH * 0.14);
   const headMid1 = inset(
     along(lerp(indexMcp, middleMcp, 0.4), down.x * headD, down.y * headD),
-    0.04,
+    0.05,
   );
   const headMid2 = inset(
     along(
@@ -191,7 +288,7 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
       down.x * (headD + palmH * 0.04),
       down.y * (headD + palmH * 0.04),
     ),
-    0.04,
+    0.05,
   );
   const headEnd = inset(
     along(
@@ -199,36 +296,33 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
       down.x * (headD + palmH * 0.08),
       down.y * (headD + palmH * 0.08),
     ),
-    0.1,
+    0.12,
   );
 
-  // —— 生命线：上端明确接虎口，再绕拇指丘落到腕侧 ——
+  // —— 生命线：虎口 → 拇指球外缘 → 腕侧（平滑弧）——
   const lifeStart = huKou;
-  const lifeMid1 = lerp(huKou, lerp(palmCenter, thumbMcp, 0.78), 0.55);
-  const lifeMid2 = lerp(palmCenter, thumbMcp, 0.8);
-  const lifeMid3 = lerp(palmCenter, thumbCmc, 0.86);
-  const lifeMid4 = lerp(palmCenter, lerp(thumbCmc, wrist, 0.35), 0.72);
-  const lifeEnd = lerp(wrist, thumbCmc, 0.5);
+  const lifeMid1 = lerp(huKou, lerp(palmCenter, thumbMcp, 0.82), 0.5);
+  const lifeMid2 = lerp(palmCenter, thumbMcp, 0.88);
+  const lifeMid3 = lerp(palmCenter, thumbCmc, 0.9);
+  const lifeMid4 = lerp(palmCenter, lerp(thumbCmc, wrist, 0.4), 0.78);
+  const lifeEnd = lerp(wrist, thumbCmc, 0.45);
 
-  // —— 事业线：柔和弯曲，止于智慧线高度，避免假直竖线 ——
+  // —— 事业线：腕中偏掌心 → 中指方向，近直柔和弧，无 wobble ——
   const careerBase = along(
     wrist,
-    toPinky.x * palmW * 0.12,
-    toPinky.y * palmW * 0.12,
+    across.x * palmW * -0.02 + (palmCenter.x - wrist.x) * 0.08,
+    across.y * palmW * -0.02 + (palmCenter.y - wrist.y) * 0.08,
   );
   const careerTop = along(
-    lerp(middleMcp, ringMcp, 0.22),
-    down.x * headD * 0.92 + toPinky.x * palmW * 0.04,
-    down.y * headD * 0.92 + toPinky.y * palmW * 0.04,
+    lerp(middleMcp, ringMcp, 0.15),
+    down.x * headD * 0.9,
+    down.y * headD * 0.9,
   );
-  const careerP = (t: number, wobble: number) =>
-    along(
-      lerp(careerBase, careerTop, t),
-      across.x * palmW * wobble,
-      across.y * palmW * wobble,
-    );
+  // 极轻侧弯（生理自然微弧，非人造 zigzag）
+  const careerSide = across.x * palmW * 0.012;
+  const careerSideY = across.y * palmW * 0.012;
 
-  return {
+  const paths: PalmPathMap = {
     heart: samplePolyline([heartStart, heartMid1, heartMid2, heartEnd], 8),
     head: samplePolyline([headStart, headMid1, headMid2, headEnd], 8),
     life: samplePolyline(
@@ -237,68 +331,74 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
     ),
     career: samplePolyline(
       [
-        careerP(0.04, 0.01),
-        careerP(0.22, 0.035),
-        careerP(0.42, -0.02),
-        careerP(0.62, 0.03),
-        careerP(0.8, -0.015),
-        careerP(0.94, 0.01),
+        careerBase,
+        along(lerp(careerBase, careerTop, 0.25), careerSide, careerSideY),
+        lerp(careerBase, careerTop, 0.5),
+        along(lerp(careerBase, careerTop, 0.75), -careerSide * 0.5, -careerSideY * 0.5),
+        careerTop,
       ],
       9,
     ),
   };
+
+  return { paths, frame };
 }
 
 /** 无关键点时：按同样解剖比例放在画面中部掌区 */
-export function buildFallbackPaths(): PalmPathMap {
+export function buildFallbackPaths(): {
+  paths: PalmPathMap;
+  frame: PalmFrame;
+} {
+  const frame = buildFallbackFrame();
   const box = { left: 22, top: 18, right: 78, bottom: 88 };
   const lx = (t: number) => box.left + (box.right - box.left) * t;
   const ly = (t: number) => box.top + (box.bottom - box.top) * t;
 
-  return {
-    // 感情线：靠上，近指根
+  const paths: PalmPathMap = {
+    // 感情线：掌高约 28%～32%（指根下 20–40% 带内）
     heart: samplePolyline(
       [
-        { x: lx(0.9) / 100, y: ly(0.18) / 100 },
-        { x: lx(0.68) / 100, y: ly(0.16) / 100 },
-        { x: lx(0.42) / 100, y: ly(0.15) / 100 },
-        { x: lx(0.22) / 100, y: ly(0.17) / 100 },
+        { x: lx(0.9) / 100, y: ly(0.3) / 100 },
+        { x: lx(0.68) / 100, y: ly(0.27) / 100 },
+        { x: lx(0.42) / 100, y: ly(0.26) / 100 },
+        { x: lx(0.22) / 100, y: ly(0.29) / 100 },
       ],
       8,
     ),
-    // 智慧线：明显更低，微斜
+    // 智慧线：掌高约 45%～55%
     head: samplePolyline(
       [
-        { x: lx(0.26) / 100, y: ly(0.34) / 100 },
-        { x: lx(0.45) / 100, y: ly(0.36) / 100 },
-        { x: lx(0.68) / 100, y: ly(0.4) / 100 },
-        { x: lx(0.88) / 100, y: ly(0.46) / 100 },
+        { x: lx(0.26) / 100, y: ly(0.42) / 100 },
+        { x: lx(0.45) / 100, y: ly(0.46) / 100 },
+        { x: lx(0.68) / 100, y: ly(0.5) / 100 },
+        { x: lx(0.88) / 100, y: ly(0.54) / 100 },
       ],
       8,
     ),
-    // 生命线：上接虎口（左上近食指侧）
+    // 生命线：虎口 → 拇指侧 → 腕
     life: samplePolyline(
       [
-        { x: lx(0.28) / 100, y: ly(0.3) / 100 },
-        { x: lx(0.18) / 100, y: ly(0.4) / 100 },
-        { x: lx(0.14) / 100, y: ly(0.56) / 100 },
-        { x: lx(0.2) / 100, y: ly(0.74) / 100 },
+        { x: lx(0.28) / 100, y: ly(0.32) / 100 },
+        { x: lx(0.16) / 100, y: ly(0.42) / 100 },
+        { x: lx(0.12) / 100, y: ly(0.56) / 100 },
+        { x: lx(0.18) / 100, y: ly(0.74) / 100 },
         { x: lx(0.34) / 100, y: ly(0.88) / 100 },
       ],
       9,
     ),
-    // 事业线：微弯，不到指根
+    // 事业线：近直，腕中 → 中指
     career: samplePolyline(
       [
-        { x: lx(0.54) / 100, y: ly(0.88) / 100 },
-        { x: lx(0.57) / 100, y: ly(0.72) / 100 },
-        { x: lx(0.52) / 100, y: ly(0.56) / 100 },
-        { x: lx(0.56) / 100, y: ly(0.42) / 100 },
-        { x: lx(0.53) / 100, y: ly(0.34) / 100 },
+        { x: lx(0.52) / 100, y: ly(0.88) / 100 },
+        { x: lx(0.53) / 100, y: ly(0.7) / 100 },
+        { x: lx(0.52) / 100, y: ly(0.52) / 100 },
+        { x: lx(0.53) / 100, y: ly(0.4) / 100 },
       ],
       9,
     ),
   };
+
+  return { paths, frame };
 }
 
 async function detectLandmarks(
@@ -350,30 +450,37 @@ export async function resolvePalmPaths(
   imageBytes: Buffer,
 ): Promise<{ paths: PalmPathMap; source: "landmarks" | "fallback" }> {
   let paths: PalmPathMap;
+  let frame: PalmFrame;
   let source: "landmarks" | "fallback" = "fallback";
 
   try {
     const landmarks = await detectLandmarks(imageBytes);
     if (landmarks && landmarks.length >= 18) {
-      paths = buildPathsFromLandmarks(landmarks);
+      const built = buildPathsFromLandmarks(landmarks);
+      paths = built.paths;
+      frame = built.frame;
       source = "landmarks";
       if (settings.debug) {
         console.log("[palmGeometry] landmarks ok", landmarks.length);
       }
     } else {
-      paths = buildFallbackPaths();
+      const built = buildFallbackPaths();
+      paths = built.paths;
+      frame = built.frame;
     }
   } catch (err) {
     console.warn(
       "[palmGeometry] landmark detect failed, using fallback:",
       err instanceof Error ? err.message : err,
     );
-    paths = buildFallbackPaths();
+    const built = buildFallbackPaths();
+    paths = built.paths;
+    frame = built.frame;
   }
 
-  // 解剖初值 → 沿法线吸附真实暗沟（掌纹沟壑）
+  // 解剖初值 → 在 ROI 内沿法线吸附真实暗沟
   try {
-    paths = await snapPathsToCreases(imageBytes, paths);
+    paths = await snapPathsToCreases(imageBytes, paths, frame);
     if (settings.debug) {
       console.log(`[palmGeometry] crease snap ok (source=${source})`);
     }

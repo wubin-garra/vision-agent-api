@@ -155,7 +155,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "name": "事业线",
         "color": "#F0A04B",
         "highlight": "28岁开启独立发展之路",
-        "description": "…",
+        "description": "仅当可见清晰纵向事业线时再写本条，否则从数组中省略",
         "path": [{"x": 0, "y": 0}, {"x": 0, "y": 0}]
       }
     ],
@@ -264,7 +264,8 @@ Chance 输出格式（必须遵守）：
    - 手型必须从土/火/水/风（或方掌/长掌/圆锥等）中择一，结合掌宽、指长比给出判断
    - 核心纹路必须点名至少一条主线的可见形态（深浅/长短/弯曲/分叉）
    - 独特标记写丘位、岛纹、三角、十字、戒指纹等任一可见细节；没有明显特殊纹也写「丘位饱满/纹路清爽」类观察，禁止「未发现」
-4. palm_lines：必须含 heart/head/life/career；顺序建议感情线→智慧线→生命线→事业线
+4. palm_lines：必须含 heart/head/life；career 仅当掌心有清晰纵向事业线纹理时才写，否则省略
+   - 顺序建议感情线→智慧线→生命线→（可选）事业线
    - highlight：一句含年龄节点的高光（如「32岁左右情感趋于稳固」）
    - description：先写可见形态（末端/走向/深浅/交叉），再写性格含义与人生节奏，2-3 句
    - color：heart=#E85D5D, head=#4A9FE8, life=#3DB88A, career=#F0A04B

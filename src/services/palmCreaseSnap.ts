@@ -1,6 +1,11 @@
 import sharp from "sharp";
 
-import type { PalmLineId, PalmPathMap, PalmPoint } from "./palmGeometry.js";
+import type {
+  PalmFrame,
+  PalmLineId,
+  PalmPathMap,
+  PalmPoint,
+} from "./palmGeometry.js";
 
 type CreaseMap = {
   /** 沟壑响应：越大表示相对邻域越暗（越像掌纹沟） */
@@ -9,17 +14,43 @@ type CreaseMap = {
   height: number;
 };
 
+type Vec = { x: number; y: number };
+
+/** 每条线在掌高轴上的搜索带（指根=0 → 腕=1） */
+const LINE_ROI: Record<
+  PalmLineId,
+  {
+    depthMin: number;
+    depthMax: number;
+    /** 横向：相对 pinky→index 的跨度容差（相对 palmW） */
+    lateralPad: number;
+    preferDir: "across" | "down" | "life";
+  }
+> = {
+  // 感情线：掌心上方 20%～40%
+  heart: { depthMin: 0.18, depthMax: 0.42, lateralPad: 0.12, preferDir: "across" },
+  // 智慧线：35%～60%
+  head: { depthMin: 0.33, depthMax: 0.62, lateralPad: 0.14, preferDir: "across" },
+  // 生命线：虎口到腕，沿拇指侧
+  life: { depthMin: 0.22, depthMax: 0.98, lateralPad: 0.35, preferDir: "life" },
+  // 事业线：腕中 → 中指，细长纵向带
+  career: { depthMin: 0.35, depthMax: 0.98, lateralPad: 0.1, preferDir: "down" },
+};
+
 const LINE_SNAP: Record<
   PalmLineId,
   { radius: number; minGain: number; passes: number }
 > = {
-  // 主横纹/生命线沟通常更深；半径按 512 边长像素
-  heart: { radius: 20, minGain: 1.8, passes: 2 },
-  head: { radius: 20, minGain: 1.8, passes: 2 },
-  life: { radius: 22, minGain: 1.5, passes: 2 },
-  // 事业线常较浅，缩小搜索、提高门槛，避免吸到错误细纹
-  career: { radius: 12, minGain: 3.2, passes: 2 },
+  heart: { radius: 14, minGain: 2.0, passes: 2 },
+  head: { radius: 14, minGain: 2.0, passes: 2 },
+  life: { radius: 16, minGain: 1.6, passes: 2 },
+  // 事业线：更严，避免吸到错误细纹
+  career: { radius: 8, minGain: 3.5, passes: 2 },
 };
+
+/** 事业线纵向纹理门控：ROI 内平均 valley 低于此值则不画 */
+const CAREER_TEXTURE_MIN = 2.4;
+const CAREER_TEXTURE_SAMPLES = 48;
 
 function boxBlur(
   src: Float32Array,
@@ -32,7 +63,6 @@ function boxBlur(
   const out = new Float32Array(w * h);
   const span = radius * 2 + 1;
 
-  // horizontal
   for (let y = 0; y < h; y += 1) {
     let sum = 0;
     for (let x = -radius; x <= radius; x += 1) {
@@ -47,7 +77,6 @@ function boxBlur(
     }
   }
 
-  // vertical
   for (let x = 0; x < w; x += 1) {
     let sum = 0;
     for (let y = -radius; y <= radius; y += 1) {
@@ -104,18 +133,17 @@ export async function buildCreaseMap(imageBytes: Buffer): Promise<CreaseMap> {
   const blur = boxBlur(gray, w, h, 3);
   const valley = new Float32Array(w * h);
   for (let i = 0; i < valley.length; i += 1) {
-    // 比邻域更暗 → 正响应（沟）
     valley[i] = blur[i]! - gray[i]!;
   }
 
   return { data: valley, width: w, height: h };
 }
 
-function pctToPx(p: PalmPoint, w: number, h: number): { x: number; y: number } {
+function pctToPx(p: PalmPoint, w: number, h: number): Vec {
   return { x: (p.x / 100) * w, y: (p.y / 100) * h };
 }
 
-function pxToPct(p: { x: number; y: number }, w: number, h: number): PalmPoint {
+function pxToPct(p: Vec, w: number, h: number): PalmPoint {
   return {
     x: Math.round(Math.min(100, Math.max(0, (p.x / w) * 100)) * 10) / 10,
     y: Math.round(Math.min(100, Math.max(0, (p.y / h) * 100)) * 10) / 10,
@@ -172,17 +200,146 @@ function smoothPath(path: PalmPoint[]): PalmPoint[] {
   return out;
 }
 
+function strongSmooth(path: PalmPoint[]): PalmPoint[] {
+  let p = path;
+  for (let i = 0; i < 3; i += 1) p = smoothPath(p);
+  return p;
+}
+
+/** 图像像素 → 归一化掌坐标（与 frame 同空间） */
+function pxToNorm(px: Vec, mapW: number, mapH: number): Vec {
+  return { x: px.x / mapW, y: px.y / mapH };
+}
+
+function normToPx(n: Vec, mapW: number, mapH: number): Vec {
+  return { x: n.x * mapW, y: n.y * mapH };
+}
+
+/**
+ * 掌高深度：0=指根，1=腕（沿 down 投影）
+ * 横向：相对该深度中轴点，沿 across 的偏移（相对 palmW）
+ */
+function palmCoords(n: Vec, frame: PalmFrame): { depth: number; lateral: number } {
+  const { fingerBase, down, across, palmH, palmW } = frame;
+  const dx = n.x - fingerBase.x;
+  const dy = n.y - fingerBase.y;
+  const depth = (dx * down.x + dy * down.y) / (palmH || 1);
+  const onAxis = {
+    x: fingerBase.x + down.x * depth * palmH,
+    y: fingerBase.y + down.y * depth * palmH,
+  };
+  const lateral =
+    ((n.x - onAxis.x) * across.x + (n.y - onAxis.y) * across.y) / (palmW || 1);
+  return { depth, lateral };
+}
+
+function fromPalmCoords(
+  depth: number,
+  lateral: number,
+  frame: PalmFrame,
+): Vec {
+  return {
+    x:
+      frame.fingerBase.x +
+      frame.down.x * depth * frame.palmH +
+      frame.across.x * lateral * frame.palmW,
+    y:
+      frame.fingerBase.y +
+      frame.down.y * depth * frame.palmH +
+      frame.across.y * lateral * frame.palmW,
+  };
+}
+
+function thumbSideSign(frame: PalmFrame): number {
+  const { thumbMcp, palmCenter, across } = frame;
+  const thumbSide =
+    (thumbMcp.x - palmCenter.x) * across.x +
+    (thumbMcp.y - palmCenter.y) * across.y;
+  return thumbSide >= 0 ? 1 : -1;
+}
+
+function inRoi(n: Vec, frame: PalmFrame, lineId: PalmLineId): boolean {
+  const roi = LINE_ROI[lineId];
+  const { depth, lateral } = palmCoords(n, frame);
+
+  if (depth < roi.depthMin - 0.04 || depth > roi.depthMax + 0.04) return false;
+
+  if (lineId === "life") {
+    const sideSign = thumbSideSign(frame);
+    // 允许从掌中到拇指外缘，禁止偏向小指侧深处
+    if (sideSign * lateral < -0.15) return false;
+    if (Math.abs(lateral) > 0.55) return false;
+    return true;
+  }
+
+  if (lineId === "career") {
+    return Math.abs(lateral) <= roi.lateralPad + 0.08;
+  }
+
+  // heart / head：横贯掌宽
+  return Math.abs(lateral) <= 0.55 + roi.lateralPad;
+}
+
+/** 将点投影回 ROI 带内 */
+function clampToRoi(n: Vec, frame: PalmFrame, lineId: PalmLineId): Vec {
+  const roi = LINE_ROI[lineId];
+  let { depth, lateral } = palmCoords(n, frame);
+  depth = Math.min(roi.depthMax, Math.max(roi.depthMin, depth));
+
+  if (lineId === "career") {
+    lateral = Math.min(roi.lateralPad, Math.max(-roi.lateralPad, lateral));
+  } else if (lineId === "life") {
+    const sideSign = thumbSideSign(frame);
+    if (sideSign * lateral < -0.1) lateral = -0.1 * sideSign;
+    lateral = Math.min(0.5, Math.max(-0.5, lateral));
+  } else {
+    lateral = Math.min(0.55, Math.max(-0.55, lateral));
+  }
+
+  return fromPalmCoords(depth, lateral, frame);
+}
+
+/**
+ * 方向一致性：候选位移后的局部切线应与偏好方向对齐。
+ * 返回 0～1 权重（越高越好）。
+ */
+function directionScore(
+  tx: number,
+  ty: number,
+  frame: PalmFrame,
+  lineId: PalmLineId,
+): number {
+  const prefer = LINE_ROI[lineId].preferDir;
+  const tlen = Math.hypot(tx, ty) || 1;
+  const ux = tx / tlen;
+  const uy = ty / tlen;
+
+  if (prefer === "across") {
+    const dot = Math.abs(ux * frame.across.x + uy * frame.across.y);
+    return dot; // 1 = 完全横向
+  }
+  if (prefer === "down") {
+    const dot = Math.abs(ux * frame.down.x + uy * frame.down.y);
+    return dot;
+  }
+  // life：弧线，允许对角；惩罚纯横向横穿掌心中部
+  const acrossDot = Math.abs(ux * frame.across.x + uy * frame.across.y);
+  const downDot = Math.abs(ux * frame.down.x + uy * frame.down.y);
+  return 0.35 + 0.65 * Math.max(acrossDot, downDot) * (1 - acrossDot * 0.3);
+}
+
 function snapOnePath(
   path: PalmPoint[],
   map: CreaseMap,
   lineId: PalmLineId,
+  frame: PalmFrame,
 ): PalmPoint[] {
   if (path.length < 2) return path;
   const cfg = LINE_SNAP[lineId];
   let pts = densify(path, 14).map((p) => pctToPx(p, map.width, map.height));
 
   for (let pass = 0; pass < cfg.passes; pass += 1) {
-    const next: Array<{ x: number; y: number }> = [];
+    const next: Vec[] = [];
     for (let i = 0; i < pts.length; i += 1) {
       const prev = pts[Math.max(0, i - 1)]!;
       const cur = pts[i]!;
@@ -195,51 +352,120 @@ function snapOnePath(
       const nx = -ty;
       const ny = tx;
 
+      const centerNorm = pxToNorm(cur, map.width, map.height);
       const centerScore = sample(map, cur.x, cur.y);
       let bestD = 0;
       let bestScore = centerScore;
 
       for (let d = -cfg.radius; d <= cfg.radius; d += 1) {
         if (d === 0) continue;
-        const sc = sample(map, cur.x + nx * d, cur.y + ny * d);
+        const cand: Vec = { x: cur.x + nx * d, y: cur.y + ny * d };
+        const candNorm = pxToNorm(cand, map.width, map.height);
+        if (!inRoi(candNorm, frame, lineId)) continue;
+
+        let sc = sample(map, cand.x, cand.y);
+        // 方向偏好：横向线惩罚纵向吸附造成的切线扭曲
+        const dirW = directionScore(tx, ty, frame, lineId);
+        sc *= 0.7 + 0.3 * dirW;
+
         if (sc > bestScore) {
           bestScore = sc;
           bestD = d;
         }
       }
 
-      // 端点少动，避免甩出掌缘；中间点要求增益够才吸附
       const isEnd = i === 0 || i === pts.length - 1;
       const gain = bestScore - centerScore;
       const allow =
         !isEnd && bestD !== 0 && gain >= cfg.minGain
           ? bestD
           : isEnd && gain >= cfg.minGain * 1.5
-            ? Math.round(bestD * 0.4)
+            ? Math.round(bestD * 0.35)
             : 0;
 
-      next.push({
+      let moved: Vec = {
         x: cur.x + nx * allow,
         y: cur.y + ny * allow,
-      });
+      };
+      let movedNorm = pxToNorm(moved, map.width, map.height);
+      if (!inRoi(movedNorm, frame, lineId)) {
+        movedNorm = clampToRoi(movedNorm, frame, lineId);
+        moved = normToPx(movedNorm, map.width, map.height);
+      } else if (!inRoi(centerNorm, frame, lineId) && allow === 0) {
+        // 初值偶发出带：拉回
+        moved = normToPx(clampToRoi(centerNorm, frame, lineId), map.width, map.height);
+      }
+
+      next.push(moved);
     }
     pts = next;
   }
 
   const pct = pts.map((p) => pxToPct(p, map.width, map.height));
-  return smoothPath(smoothPath(pct));
+  return strongSmooth(pct);
 }
 
-/** 把解剖示意线沿法线吸附到图像中的真实暗沟 */
+/**
+ * 在事业线细长 ROI 内采样纵向 valley 能量。
+ * 沿腕→中指主轴取点，比较「沿 across 的局部暗沟」响应。
+ */
+function measureCareerTexture(map: CreaseMap, frame: PalmFrame): number {
+  const { wrist, middleMcp, down, across, palmW, palmH } = frame;
+  const top = {
+    x: middleMcp.x + down.x * palmH * 0.4,
+    y: middleMcp.y + down.y * palmH * 0.4,
+  };
+  const base = {
+    x: wrist.x + (frame.palmCenter.x - wrist.x) * 0.1,
+    y: wrist.y + (frame.palmCenter.y - wrist.y) * 0.1,
+  };
+
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < CAREER_TEXTURE_SAMPLES; i += 1) {
+    const t = i / (CAREER_TEXTURE_SAMPLES - 1);
+    const cx = base.x + (top.x - base.x) * t;
+    const cy = base.y + (top.y - base.y) * t;
+    // 在法线（across）方向找最大 valley，模拟纵向沟
+    let best = -1e9;
+    const radius = Math.max(2, Math.round(palmW * map.width * 0.08));
+    for (let d = -radius; d <= radius; d += 1) {
+      const px = cx * map.width + across.x * d;
+      const py = cy * map.height + across.y * d;
+      const n = { x: px / map.width, y: py / map.height };
+      if (!inRoi(n, frame, "career")) continue;
+      best = Math.max(best, sample(map, px, py));
+    }
+    if (best > -1e8) {
+      sum += best;
+      count += 1;
+    }
+  }
+  return count > 0 ? sum / count : 0;
+}
+
+/** 把解剖示意线沿法线吸附到图像中的真实暗沟（限制在生理 ROI 内） */
 export async function snapPathsToCreases(
   imageBytes: Buffer,
   paths: PalmPathMap,
+  frame: PalmFrame,
 ): Promise<PalmPathMap> {
   const map = await buildCreaseMap(imageBytes);
-  return {
-    heart: snapOnePath(paths.heart, map, "heart"),
-    head: snapOnePath(paths.head, map, "head"),
-    life: snapOnePath(paths.life, map, "life"),
-    career: snapOnePath(paths.career, map, "career"),
-  };
+
+  const heart = snapOnePath(paths.heart, map, "heart", frame);
+  const head = snapOnePath(paths.head, map, "head", frame);
+  const life = snapOnePath(paths.life, map, "life", frame);
+
+  const result: PalmPathMap = { heart, head, life };
+
+  // 事业线：仅当 ROI 内有明显纵向纹理时才吸附并保留
+  if (paths.career && paths.career.length >= 2) {
+    const texture = measureCareerTexture(map, frame);
+    if (texture >= CAREER_TEXTURE_MIN) {
+      result.career = snapOnePath(paths.career, map, "career", frame);
+    }
+    // else: omit career
+  }
+
+  return result;
 }

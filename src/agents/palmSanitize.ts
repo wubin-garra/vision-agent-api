@@ -10,6 +10,19 @@ const DEFAULT_TRAITS: Record<string, string> = {
   独特标记: "掌丘饱满—能量储备充足，适合持续深耕",
 };
 
+const REQUIRED_LINE_IDS = ["heart", "head", "life"] as const;
+const OPTIONAL_LINE_IDS = ["career"] as const;
+
+const LINE_META: Record<
+  (typeof REQUIRED_LINE_IDS)[number] | (typeof OPTIONAL_LINE_IDS)[number],
+  { name: string; color: string }
+> = {
+  heart: { name: "感情线", color: "#E85D5D" },
+  head: { name: "智慧线", color: "#4A9FE8" },
+  life: { name: "生命线", color: "#3DB88A" },
+  career: { name: "事业线", color: "#F0A04B" },
+};
+
 function fallbackTrait(label: string, clues: string[]): string {
   const matched = clues.find((c) => c && !UNKNOWN_RE.test(c));
   if (matched) {
@@ -54,7 +67,7 @@ export function sanitizePalmInsight(
     };
   });
 
-  const palmLines = (reading.palm_lines ?? []).map((line) => {
+  let palmLines = (reading.palm_lines ?? []).map((line) => {
     const geo = geometryPaths?.[line.id as keyof PalmPathMap];
     if (geo && geo.length >= 2) {
       return { ...line, path: geo };
@@ -62,31 +75,38 @@ export function sanitizePalmInsight(
     return line;
   });
 
+  // 无清晰事业线几何时，去掉事业线（不强制展示）
+  const hasCareerGeo =
+    !!geometryPaths?.career && geometryPaths.career.length >= 2;
+  if (geometryPaths && !hasCareerGeo) {
+    palmLines = palmLines.filter((l) => l.id !== "career");
+  }
+
   if (geometryPaths) {
-    const ids = ["heart", "head", "life", "career"] as const;
-    const names: Record<(typeof ids)[number], string> = {
-      heart: "感情线",
-      head: "智慧线",
-      life: "生命线",
-      career: "事业线",
-    };
-    const colors: Record<(typeof ids)[number], string> = {
-      heart: "#E85D5D",
-      head: "#4A9FE8",
-      life: "#3DB88A",
-      career: "#F0A04B",
-    };
-    for (const id of ids) {
+    for (const id of REQUIRED_LINE_IDS) {
+      const geo = geometryPaths[id];
+      if (!geo || geo.length < 2) continue;
       if (!palmLines.some((l) => l.id === id)) {
         palmLines.push({
           id,
-          name: names[id],
-          color: colors[id],
+          name: LINE_META[id].name,
+          color: LINE_META[id].color,
           highlight: "人生节奏仍在展开",
           description: "主线形态清晰可辨，指向稳定而持续的内在节奏。",
-          path: geometryPaths[id],
+          path: geo,
         });
       }
+    }
+    // career 仅在几何确认有纵向纹理时补齐
+    if (hasCareerGeo && !palmLines.some((l) => l.id === "career")) {
+      palmLines.push({
+        id: "career",
+        name: LINE_META.career.name,
+        color: LINE_META.career.color,
+        highlight: "人生节奏仍在展开",
+        description: "主线形态清晰可辨，指向稳定而持续的内在节奏。",
+        path: geometryPaths.career!,
+      });
     }
   }
 

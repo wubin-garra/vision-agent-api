@@ -42,12 +42,23 @@ function buildVisionAnalyzeUserText(input: {
   latitude?: number | null;
   longitude?: number | null;
   birthday?: string | null;
+  agentId?: string;
+  imageCaption?: string | null;
 }): string {
+  const palmHint =
+    input.agentId === "palm_reader"
+      ? "\n\n这是手相分析：请仔细看清掌心真实纹路沟壑，为 heart/head/life/career 各输出 6–8 个贴合可见沟壑的 path 点（0–100 百分比，左上为原点）。禁止使用固定模板坐标。"
+      : "";
+  const captionHint = input.imageCaption
+    ? `\n参考视觉描述（可校正）：\n${input.imageCaption}\n`
+    : "";
   return (
     `Locale: ${input.locale}\n` +
     `${formatGeoContext(input.latitude, input.longitude)}\n` +
-    `${formatBirthdayContext(input.birthday)}\n\n` +
-    "请直接根据图片输出结构化 JSON 洞察。" +
+    `${formatBirthdayContext(input.birthday)}\n` +
+    captionHint +
+    palmHint +
+    "\n请直接根据图片输出结构化 JSON 洞察。" +
     "只输出合法 JSON，务必闭合所有字符串与括号。"
   );
 }
@@ -164,14 +175,20 @@ export class VlmService {
     const qualityMode = Boolean(input.qualityMode);
     const maxTokens = analyzeMaxTokens(input.agentId, qualityMode);
 
-    // 自动模式：视觉多模态直出（更快）
-    // 专项镜头 qualityMode：跳过，走下方完整 caption + DeepSeek
-    if (!qualityMode && visionService.enabled) {
+    // 自动模式：视觉多模态直出
+    // 看手相师：必须看图描摹真实掌纹坐标（qualityMode 也不能只走纯文本 LLM）
+    // 其他专项 qualityMode：caption + DeepSeek 完整 JSON
+    const forceVision =
+      input.agentId === "palm_reader" || (!qualityMode && visionService.enabled);
+
+    if (forceVision && visionService.enabled) {
       const userText = buildVisionAnalyzeUserText({
         locale,
         latitude: input.latitude,
         longitude: input.longitude,
         birthday: input.birthday,
+        agentId: input.agentId,
+        imageCaption: input.imageCaption,
       });
       const runVision = (text: string) =>
         visionService.analyzeImageJson({

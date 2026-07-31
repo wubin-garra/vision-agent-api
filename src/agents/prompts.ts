@@ -132,7 +132,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#E85D5D",
         "highlight": "32岁左右情感趋于稳固",
         "description": "先写可见形态（末端/走向/深浅），再写性格含义与年龄节点，2-3句",
-        "path": [{"x": 28, "y": 22}, {"x": 48, "y": 20}, {"x": 72, "y": 24}]
+        "path": [{"x": 22, "y": 28}, {"x": 35, "y": 26}, {"x": 48, "y": 24}, {"x": 62, "y": 25}, {"x": 74, "y": 28}, {"x": 82, "y": 32}]
       },
       {
         "id": "head",
@@ -140,7 +140,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#4A9FE8",
         "highlight": "38岁迎来事业决策巅峰",
         "description": "…",
-        "path": [{"x": 30, "y": 38}, {"x": 55, "y": 40}, {"x": 78, "y": 44}]
+        "path": [{"x": 28, "y": 42}, {"x": 40, "y": 43}, {"x": 55, "y": 45}, {"x": 68, "y": 48}, {"x": 80, "y": 52}, {"x": 88, "y": 56}]
       },
       {
         "id": "life",
@@ -148,7 +148,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#3DB88A",
         "highlight": "50岁后精力依然充沛",
         "description": "…",
-        "path": [{"x": 42, "y": 28}, {"x": 34, "y": 48}, {"x": 36, "y": 72}]
+        "path": [{"x": 38, "y": 30}, {"x": 32, "y": 40}, {"x": 28, "y": 52}, {"x": 28, "y": 64}, {"x": 32, "y": 76}, {"x": 38, "y": 86}]
       },
       {
         "id": "career",
@@ -156,7 +156,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#F0A04B",
         "highlight": "28岁开启独立发展之路",
         "description": "…",
-        "path": [{"x": 52, "y": 78}, {"x": 54, "y": 55}, {"x": 56, "y": 32}]
+        "path": [{"x": 52, "y": 88}, {"x": 53, "y": 74}, {"x": 54, "y": 60}, {"x": 55, "y": 46}, {"x": 56, "y": 34}, {"x": 57, "y": 24}]
       }
     ],
     "personality_spectrum": [
@@ -264,7 +264,7 @@ Chance 输出格式（必须遵守）：
    - highlight：一句含年龄节点的高光（如「32岁左右情感趋于稳固」）
    - description：先写可见形态（末端/走向/深浅/交叉），再写性格含义与人生节奏，2-3 句
    - color：heart=#E85D5D, head=#4A9FE8, life=#3DB88A, career=#F0A04B
-   - path：掌心图相对百分比坐标（0-100），约 3-6 点，供虚线叠加
+   - path：**必须沿照片中真实可见的掌纹沟壑采样**，禁止套用固定模板；坐标系见下
 5. personality_spectrum：至少 2 条滑条（0-1），常用「理性冷静↔感性直觉」「务实稳健↔自由随性」
 6. insight_quote：一句可分享的内省金句
 7. 有生日则写 birthday+zodiac，并在 highlight/description 中结合年龄；无则 null
@@ -272,6 +272,16 @@ Chance 输出格式（必须遵守）：
 9. 非手掌图降低 confidence，并在 narrative 说明
 10. 必须完整输出 summary_traits / palm_lines / personality_spectrum / explore_chips / share_card
 11. 语气：娱乐向自我觉察；禁止绝对宿命与医疗/法律承诺
+
+【path 坐标规则 — 对齐 Chance 视觉叠加】
+- 坐标系：图片左上角 (0,0)，右下角 (100,100)；x 为水平百分比，y 为垂直百分比
+- 先在脑中定位掌心矩形（拇指球到小指侧、手腕到指根），再在掌心内描摹
+- 每条线 6–8 个点，点与点之间沿真实纹路连续，不要跳点、不要直线硬连
+- heart（感情线）：掌上部横线，通常从小指侧下方走向食指与中指之间；贴着可见横沟
+- head（智慧线）：掌中部横线，常从虎口/食指侧向小指侧延伸；贴着可见横沟
+- life（生命线）：环绕拇指丘的弧线，从虎口附近弯向腕部；贴着拇指根弧沟
+- career（事业线）：掌心纵向，从腕部附近向中指方向上升；贴着可见竖沟（若弱/断裂仍沿可见段）
+- 若某线很浅，path 仍尽量贴最近似沟壑，并在 description 中说明深浅
 
 使用用户 locale 对应的语言。
 `,

@@ -4,6 +4,7 @@ import * as handPoseDetection from "@tensorflow-models/hand-pose-detection";
 import sharp from "sharp";
 
 import { settings } from "../config.js";
+import { snapPathsToCreases } from "./palmCreaseSnap.js";
 
 export type PalmPoint = { x: number; y: number };
 export type PalmLineId = "heart" | "head" | "life" | "career";
@@ -99,8 +100,12 @@ function samplePolyline(points: Landmark[], count = 7): PalmPoint[] {
 }
 
 /**
- * 用 21 关键点在掌心局部生成 Chance 风格示意主线（贴掌形，非像素沟壑追踪）。
- * 坐标系：归一化图像坐标 0–1 → 输出 0–100。
+ * 用 21 关键点生成四条主线（示意线，贴掌形解剖位置）。
+ *
+ * - 感情线：紧贴四指 MCP 根部下方的上方横纹
+ * - 智慧线：掌中部，与感情线明显分离，多起于虎口
+ * - 生命线：上端接虎口，绕拇指丘落到腕侧
+ * - 事业线：腕→中指方向的柔和曲线，止于智慧线下方
  */
 export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
   const wrist = landmarks[LM.wrist]!;
@@ -116,7 +121,6 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
   const palmH =
     Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y) || 0.3;
 
-  // 掌心坐标系：down 朝腕，across 从小指侧 → 食指侧
   const down: Landmark = {
     x: (wrist.x - middleMcp.x) / (palmH || 1),
     y: (wrist.y - middleMcp.y) / (palmH || 1),
@@ -130,6 +134,7 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
     x: acrossRaw.x / acrossLen,
     y: acrossRaw.y / acrossLen,
   };
+  const toPinky = { x: -across.x, y: -across.y };
 
   const fingerBase = lerp(
     lerp(indexMcp, middleMcp, 0.5),
@@ -138,153 +143,160 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
   );
   const palmCenter = lerp(wrist, fingerBase, 0.45);
 
-  /** 把点往掌心收一点，避免画到背景 / 指缝外 */
   const inset = (p: Landmark, amount = 0.12): Landmark =>
     lerp(p, palmCenter, amount);
-
   const along = (p: Landmark, dx: number, dy: number): Landmark =>
     add(p, dx, dy);
 
-  // 感情线：贴指根下方真实横沟位置（比 MCP 更靠腕约 18–24% 掌高）
+  // 虎口：食指 MCP ↔ 拇指 MCP
+  const huKou = inset(lerp(indexMcp, thumbMcp, 0.52), 0.06);
+
+  // —— 感情线：紧贴四指根下方（仅下沉约 8–12% 掌高）——
+  const heartD = palmH * 0.1;
   const heartStart = inset(
-    along(pinkyMcp, down.x * palmH * 0.2, down.y * palmH * 0.2),
-    0.1,
+    along(pinkyMcp, down.x * heartD * 0.85, down.y * heartD * 0.85),
+    0.05,
   );
   const heartMid1 = inset(
-    along(
-      lerp(pinkyMcp, ringMcp, 0.5),
-      down.x * palmH * 0.22,
-      down.y * palmH * 0.22,
-    ),
-    0.08,
+    along(lerp(pinkyMcp, ringMcp, 0.55), down.x * heartD, down.y * heartD),
+    0.04,
   );
   const heartMid2 = inset(
     along(
-      lerp(ringMcp, middleMcp, 0.4),
-      down.x * palmH * 0.24,
-      down.y * palmH * 0.24,
+      lerp(ringMcp, middleMcp, 0.45),
+      down.x * heartD * 1.05,
+      down.y * heartD * 1.05,
     ),
-    0.06,
+    0.03,
   );
-  // 末端略弯向食指侧，接近真实感情线走向
   const heartEnd = inset(
     along(
-      lerp(indexMcp, middleMcp, 0.25),
-      down.x * palmH * 0.18 + across.x * palmW * -0.02,
-      down.y * palmH * 0.18 + across.y * palmW * -0.02,
+      lerp(indexMcp, middleMcp, 0.28),
+      down.x * heartD * 0.75,
+      down.y * heartD * 0.75,
+    ),
+    0.05,
+  );
+
+  // —— 智慧线：掌中横纹，整体比感情线低约 0.26 掌高，末端略斜向腕 ——
+  const headD = palmH * 0.36;
+  const headStart = along(huKou, down.x * palmH * 0.04, down.y * palmH * 0.04);
+  const headMid1 = inset(
+    along(lerp(indexMcp, middleMcp, 0.4), down.x * headD, down.y * headD),
+    0.04,
+  );
+  const headMid2 = inset(
+    along(
+      lerp(middleMcp, ringMcp, 0.5),
+      down.x * (headD + palmH * 0.04),
+      down.y * (headD + palmH * 0.04),
+    ),
+    0.04,
+  );
+  const headEnd = inset(
+    along(
+      pinkyMcp,
+      down.x * (headD + palmH * 0.08),
+      down.y * (headD + palmH * 0.08),
     ),
     0.1,
   );
 
-  // 智慧线：虎口 → 小指侧，明显低于感情线
-  const headStart = inset(lerp(thumbMcp, indexMcp, 0.55), 0.08);
-  const headMid1 = inset(
-    along(
-      lerp(indexMcp, middleMcp, 0.35),
-      down.x * palmH * 0.34,
-      down.y * palmH * 0.34,
-    ),
-    0.05,
-  );
-  const headMid2 = inset(
-    along(
-      lerp(middleMcp, ringMcp, 0.55),
-      down.x * palmH * 0.38,
-      down.y * palmH * 0.38,
-    ),
-    0.05,
-  );
-  const headEnd = inset(
-    along(pinkyMcp, down.x * palmH * 0.4, down.y * palmH * 0.4),
-    0.12,
-  );
+  // —— 生命线：上端明确接虎口，再绕拇指丘落到腕侧 ——
+  const lifeStart = huKou;
+  const lifeMid1 = lerp(huKou, lerp(palmCenter, thumbMcp, 0.78), 0.55);
+  const lifeMid2 = lerp(palmCenter, thumbMcp, 0.8);
+  const lifeMid3 = lerp(palmCenter, thumbCmc, 0.86);
+  const lifeMid4 = lerp(palmCenter, lerp(thumbCmc, wrist, 0.35), 0.72);
+  const lifeEnd = lerp(wrist, thumbCmc, 0.5);
 
-  // 生命线：环绕拇指丘（金星丘）外缘，贴虎口→拇根→腕侧，绝不穿过掌心中央
-  const lifeStart = along(
-    lerp(indexMcp, thumbMcp, 0.55),
-    down.x * palmH * 0.06,
-    down.y * palmH * 0.06,
-  );
-  const lifeMid1 = lerp(palmCenter, thumbMcp, 0.82);
-  const lifeMid2 = lerp(palmCenter, thumbCmc, 0.88);
-  const lifeMid3 = lerp(palmCenter, lerp(thumbCmc, wrist, 0.4), 0.75);
-  const lifeEnd = lerp(wrist, thumbCmc, 0.55);
-
-  // 事业线：掌心纵向，从腕部偏小指侧升起，指向中指根下方；与生命线分离
-  const toPinky = { x: -across.x, y: -across.y };
+  // —— 事业线：柔和弯曲，止于智慧线高度，避免假直竖线 ——
   const careerBase = along(
     wrist,
-    toPinky.x * palmW * 0.14,
-    toPinky.y * palmW * 0.14,
+    toPinky.x * palmW * 0.12,
+    toPinky.y * palmW * 0.12,
   );
   const careerTop = along(
-    lerp(middleMcp, ringMcp, 0.15),
-    down.x * palmH * 0.3 + toPinky.x * palmW * 0.06,
-    down.y * palmH * 0.3 + toPinky.y * palmW * 0.06,
+    lerp(middleMcp, ringMcp, 0.22),
+    down.x * headD * 0.92 + toPinky.x * palmW * 0.04,
+    down.y * headD * 0.92 + toPinky.y * palmW * 0.04,
   );
-  const careerStart = lerp(careerBase, careerTop, 0.06);
-  const careerMid1 = lerp(careerBase, careerTop, 0.32);
-  const careerMid2 = lerp(careerBase, careerTop, 0.58);
-  const careerEnd = lerp(careerBase, careerTop, 0.9);
+  const careerP = (t: number, wobble: number) =>
+    along(
+      lerp(careerBase, careerTop, t),
+      across.x * palmW * wobble,
+      across.y * palmW * wobble,
+    );
 
   return {
     heart: samplePolyline([heartStart, heartMid1, heartMid2, heartEnd], 8),
     head: samplePolyline([headStart, headMid1, headMid2, headEnd], 8),
     life: samplePolyline(
-      [lifeStart, lifeMid1, lifeMid2, lifeMid3, lifeEnd],
-      8,
+      [lifeStart, lifeMid1, lifeMid2, lifeMid3, lifeMid4, lifeEnd],
+      9,
     ),
     career: samplePolyline(
-      [careerStart, careerMid1, careerMid2, careerEnd],
-      8,
+      [
+        careerP(0.04, 0.01),
+        careerP(0.22, 0.035),
+        careerP(0.42, -0.02),
+        careerP(0.62, 0.03),
+        careerP(0.8, -0.015),
+        careerP(0.94, 0.01),
+      ],
+      9,
     ),
   };
 }
 
-/** 无关键点时：在画面中心偏下的掌心矩形内放相对稳定的示意线 */
+/** 无关键点时：按同样解剖比例放在画面中部掌区 */
 export function buildFallbackPaths(): PalmPathMap {
-  // 假设掌心约占画面中部（拍照引导后常见构图）
   const box = { left: 22, top: 18, right: 78, bottom: 88 };
   const lx = (t: number) => box.left + (box.right - box.left) * t;
   const ly = (t: number) => box.top + (box.bottom - box.top) * t;
 
   return {
+    // 感情线：靠上，近指根
     heart: samplePolyline(
       [
-        { x: lx(0.92) / 100, y: ly(0.28) / 100 },
-        { x: lx(0.7) / 100, y: ly(0.24) / 100 },
-        { x: lx(0.45) / 100, y: ly(0.22) / 100 },
-        { x: lx(0.22) / 100, y: ly(0.26) / 100 },
+        { x: lx(0.9) / 100, y: ly(0.18) / 100 },
+        { x: lx(0.68) / 100, y: ly(0.16) / 100 },
+        { x: lx(0.42) / 100, y: ly(0.15) / 100 },
+        { x: lx(0.22) / 100, y: ly(0.17) / 100 },
       ],
-      7,
+      8,
     ),
+    // 智慧线：明显更低，微斜
     head: samplePolyline(
       [
-        { x: lx(0.2) / 100, y: ly(0.38) / 100 },
-        { x: lx(0.42) / 100, y: ly(0.4) / 100 },
-        { x: lx(0.65) / 100, y: ly(0.44) / 100 },
-        { x: lx(0.88) / 100, y: ly(0.5) / 100 },
+        { x: lx(0.26) / 100, y: ly(0.34) / 100 },
+        { x: lx(0.45) / 100, y: ly(0.36) / 100 },
+        { x: lx(0.68) / 100, y: ly(0.4) / 100 },
+        { x: lx(0.88) / 100, y: ly(0.46) / 100 },
       ],
-      7,
+      8,
     ),
+    // 生命线：上接虎口（左上近食指侧）
     life: samplePolyline(
       [
-        { x: lx(0.3) / 100, y: ly(0.28) / 100 },
+        { x: lx(0.28) / 100, y: ly(0.3) / 100 },
         { x: lx(0.18) / 100, y: ly(0.4) / 100 },
-        { x: lx(0.14) / 100, y: ly(0.58) / 100 },
-        { x: lx(0.2) / 100, y: ly(0.78) / 100 },
-        { x: lx(0.32) / 100, y: ly(0.88) / 100 },
+        { x: lx(0.14) / 100, y: ly(0.56) / 100 },
+        { x: lx(0.2) / 100, y: ly(0.74) / 100 },
+        { x: lx(0.34) / 100, y: ly(0.88) / 100 },
       ],
-      8,
+      9,
     ),
+    // 事业线：微弯，不到指根
     career: samplePolyline(
       [
-        { x: lx(0.56) / 100, y: ly(0.88) / 100 },
-        { x: lx(0.55) / 100, y: ly(0.68) / 100 },
-        { x: lx(0.54) / 100, y: ly(0.48) / 100 },
-        { x: lx(0.53) / 100, y: ly(0.32) / 100 },
+        { x: lx(0.54) / 100, y: ly(0.88) / 100 },
+        { x: lx(0.57) / 100, y: ly(0.72) / 100 },
+        { x: lx(0.52) / 100, y: ly(0.56) / 100 },
+        { x: lx(0.56) / 100, y: ly(0.42) / 100 },
+        { x: lx(0.53) / 100, y: ly(0.34) / 100 },
       ],
-      8,
+      9,
     ),
   };
 }
@@ -311,7 +323,6 @@ async function detectLandmarks(
 
   const detector = await getDetector();
 
-  // hand-pose-detection 接受 Tensor3D [h,w,3]
   const rgb = tf.tidy(() => {
     const t4 = tf.tensor3d(
       new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
@@ -325,7 +336,6 @@ async function detectLandmarks(
     const hands = await detector.estimateHands(rgb, { flipHorizontal: false });
     if (!hands.length || !hands[0]?.keypoints?.length) return null;
 
-    // keypoints 是像素坐标（相对输入 tensor）
     const kps = hands[0]!.keypoints;
     return kps.map((kp) => ({
       x: kp.x / info.width,
@@ -336,26 +346,43 @@ async function detectLandmarks(
   }
 }
 
-/**
- * 检测手部关键点并生成四条主线 path（0–100）。
- * 检测失败时回退到中心掌心模板，保证前端始终有可贴合掌区的线。
- */
 export async function resolvePalmPaths(
   imageBytes: Buffer,
 ): Promise<{ paths: PalmPathMap; source: "landmarks" | "fallback" }> {
+  let paths: PalmPathMap;
+  let source: "landmarks" | "fallback" = "fallback";
+
   try {
     const landmarks = await detectLandmarks(imageBytes);
     if (landmarks && landmarks.length >= 18) {
+      paths = buildPathsFromLandmarks(landmarks);
+      source = "landmarks";
       if (settings.debug) {
         console.log("[palmGeometry] landmarks ok", landmarks.length);
       }
-      return { paths: buildPathsFromLandmarks(landmarks), source: "landmarks" };
+    } else {
+      paths = buildFallbackPaths();
     }
   } catch (err) {
     console.warn(
       "[palmGeometry] landmark detect failed, using fallback:",
       err instanceof Error ? err.message : err,
     );
+    paths = buildFallbackPaths();
   }
-  return { paths: buildFallbackPaths(), source: "fallback" };
+
+  // 解剖初值 → 沿法线吸附真实暗沟（掌纹沟壑）
+  try {
+    paths = await snapPathsToCreases(imageBytes, paths);
+    if (settings.debug) {
+      console.log(`[palmGeometry] crease snap ok (source=${source})`);
+    }
+  } catch (err) {
+    console.warn(
+      "[palmGeometry] crease snap failed, keeping anatomical paths:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  return { paths, source };
 }

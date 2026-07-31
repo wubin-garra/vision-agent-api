@@ -199,27 +199,41 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
     0.12,
   );
 
-  // 生命线：紧贴拇指丘弧，不甩到掌心中央
-  const lifeStart = inset(lerp(indexMcp, thumbMcp, 0.42), 0.05);
-  const lifeMid1 = lerp(thumbMcp, thumbCmc, 0.25);
-  const lifeMid2 = along(
-    lerp(thumbCmc, wrist, 0.35),
-    across.x * palmW * 0.04,
-    across.y * palmW * 0.04,
+  // 生命线：环绕拇指丘（金星丘）外缘，贴虎口→拇根→腕侧，绝不穿过掌心中央
+  const lifeStart = along(
+    lerp(indexMcp, thumbMcp, 0.55),
+    down.x * palmH * 0.06,
+    down.y * palmH * 0.06,
   );
-  const lifeEnd = lerp(wrist, thumbCmc, 0.22);
+  const lifeMid1 = lerp(palmCenter, thumbMcp, 0.82);
+  const lifeMid2 = lerp(palmCenter, thumbCmc, 0.88);
+  const lifeMid3 = lerp(palmCenter, lerp(thumbCmc, wrist, 0.4), 0.75);
+  const lifeEnd = lerp(wrist, thumbCmc, 0.55);
 
-  // 事业线：腕中 → 中指根方向，止于掌心上半，避开感情线与指根
-  const careerAxisEnd = lerp(wrist, middleMcp, 0.62);
-  const careerStart = lerp(wrist, careerAxisEnd, 0.08);
-  const careerMid1 = lerp(wrist, careerAxisEnd, 0.32);
-  const careerMid2 = lerp(wrist, careerAxisEnd, 0.55);
-  const careerEnd = lerp(wrist, careerAxisEnd, 0.88);
+  // 事业线：掌心纵向，从腕部偏小指侧升起，指向中指根下方；与生命线分离
+  const toPinky = { x: -across.x, y: -across.y };
+  const careerBase = along(
+    wrist,
+    toPinky.x * palmW * 0.14,
+    toPinky.y * palmW * 0.14,
+  );
+  const careerTop = along(
+    lerp(middleMcp, ringMcp, 0.15),
+    down.x * palmH * 0.3 + toPinky.x * palmW * 0.06,
+    down.y * palmH * 0.3 + toPinky.y * palmW * 0.06,
+  );
+  const careerStart = lerp(careerBase, careerTop, 0.06);
+  const careerMid1 = lerp(careerBase, careerTop, 0.32);
+  const careerMid2 = lerp(careerBase, careerTop, 0.58);
+  const careerEnd = lerp(careerBase, careerTop, 0.9);
 
   return {
     heart: samplePolyline([heartStart, heartMid1, heartMid2, heartEnd], 8),
     head: samplePolyline([headStart, headMid1, headMid2, headEnd], 8),
-    life: samplePolyline([lifeStart, lifeMid1, lifeMid2, lifeEnd], 8),
+    life: samplePolyline(
+      [lifeStart, lifeMid1, lifeMid2, lifeMid3, lifeEnd],
+      8,
+    ),
     career: samplePolyline(
       [careerStart, careerMid1, careerMid2, careerEnd],
       8,
@@ -255,21 +269,22 @@ export function buildFallbackPaths(): PalmPathMap {
     ),
     life: samplePolyline(
       [
-        { x: lx(0.28) / 100, y: ly(0.3) / 100 },
-        { x: lx(0.2) / 100, y: ly(0.45) / 100 },
-        { x: lx(0.18) / 100, y: ly(0.62) / 100 },
-        { x: lx(0.28) / 100, y: ly(0.82) / 100 },
+        { x: lx(0.3) / 100, y: ly(0.28) / 100 },
+        { x: lx(0.18) / 100, y: ly(0.4) / 100 },
+        { x: lx(0.14) / 100, y: ly(0.58) / 100 },
+        { x: lx(0.2) / 100, y: ly(0.78) / 100 },
+        { x: lx(0.32) / 100, y: ly(0.88) / 100 },
       ],
-      7,
+      8,
     ),
     career: samplePolyline(
       [
-        { x: lx(0.5) / 100, y: ly(0.85) / 100 },
-        { x: lx(0.51) / 100, y: ly(0.65) / 100 },
-        { x: lx(0.52) / 100, y: ly(0.45) / 100 },
-        { x: lx(0.53) / 100, y: ly(0.28) / 100 },
+        { x: lx(0.56) / 100, y: ly(0.88) / 100 },
+        { x: lx(0.55) / 100, y: ly(0.68) / 100 },
+        { x: lx(0.54) / 100, y: ly(0.48) / 100 },
+        { x: lx(0.53) / 100, y: ly(0.32) / 100 },
       ],
-      7,
+      8,
     ),
   };
 }

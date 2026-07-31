@@ -15,6 +15,7 @@
 | 食识拍字段不全 | 是否传了 `agent_override=food_scan`；专项走完整链路 |
 | 积分刷新没了 | 预期：还未持久化 / 未接 API |
 | Gradle / Hermes 下载失败 | 用国内 Maven 镜像；Windows 注意路径过长（短 `GRADLE_USER_HOME`） |
+| `git push` 卡在 github.com:443 | 浏览器能开、Git 不通时，多为未走本机代理；试 `$env:HTTPS_PROXY="http://127.0.0.1:10808"` 再 push |
 
 ## 架构（别踩错）
 

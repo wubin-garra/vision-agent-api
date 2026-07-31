@@ -45,6 +45,20 @@ Health：http://localhost:8000/health
 
 产品 / 埋点 / 食识拍文档在移动端仓库：`../vision-agent-mobile/docs/`
 
+## 当前 Agent（对外菜单）
+
+| ID | 名称 |
+|----|------|
+| `stylist` | 穿搭检查师 |
+| `food_scan` | 食识拍 |
+| `palm_reader` | 看手相师 |
+| `food_explorer` | 零食分析 |
+| `local_guide` | 本地向导 |
+| `menu_translator` | 翻译师 |
+| `general_curiosity` | 好奇心 |
+
+`palm_reader` 路径：MediaPipe 关键点 → 解剖初值 → ROI 内暗沟吸附（`palmGeometry` / `palmCreaseSnap`）；事业线无清晰纵纹则省略。
+
 ## 目录约定
 
 - `src/routes/*`：HTTP 适配（multipart / SSE / JSON）

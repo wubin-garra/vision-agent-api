@@ -35,6 +35,15 @@ const FOOD_SCAN_THINKING_STEPS = [
 
 const FOOD_SCAN_THINKING_STEP_DELAYS_MS = [2800, 3000, 3200, 0];
 
+const PALM_READER_THINKING_STEPS = [
+  "确认画面中的掌心与主线",
+  "描摹感情线、智慧线与生命线",
+  "解读事业线与性格光谱",
+  "结合生日生成专属洞察",
+];
+
+const PALM_READER_THINKING_STEP_DELAYS_MS = [2800, 3200, 3400, 0];
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -81,12 +90,14 @@ async function readMultipartAnalyze(request: {
   latitude?: number;
   longitude?: number;
   agentOverride?: string;
+  birthday?: string;
 }> {
   let image: Buffer | null = null;
   let locale = "zh-CN";
   let latitude: number | undefined;
   let longitude: number | undefined;
   let agentOverride: string | undefined;
+  let birthday: string | undefined;
 
   for await (const part of request.parts()) {
     if (part.type === "file" && part.fieldname === "image" && part.toBuffer) {
@@ -102,6 +113,8 @@ async function readMultipartAnalyze(request: {
         longitude = optionalFloat(part.value);
       } else if (part.fieldname === "agent_override") {
         agentOverride = optionalString(part.value);
+      } else if (part.fieldname === "birthday") {
+        birthday = optionalString(part.value);
       }
     }
   }
@@ -110,7 +123,7 @@ async function readMultipartAnalyze(request: {
     throw Object.assign(new Error("Empty image"), { statusCode: 400 });
   }
 
-  return { image, locale, latitude, longitude, agentOverride };
+  return { image, locale, latitude, longitude, agentOverride, birthday };
 }
 
 function sendSse(
@@ -142,6 +155,7 @@ async function runAnalyzePipeline(input: {
   locale: string;
   latitude?: number;
   longitude?: number;
+  birthday?: string;
   agentOverride?: ReturnType<typeof parseAgentOverride>;
   onStage?: (stage: string) => void;
   onAgent?: (agentId: AgentId) => void;
@@ -170,6 +184,7 @@ async function runAnalyzePipeline(input: {
       imageCaption: caption,
       latitude: input.latitude,
       longitude: input.longitude,
+      birthday: input.birthday,
       qualityMode: true,
     });
     timedLog("insight_quality", insightStarted);
@@ -205,6 +220,7 @@ async function runAnalyzePipeline(input: {
     imageCaption: caption,
     latitude: input.latitude,
     longitude: input.longitude,
+    birthday: input.birthday,
     qualityMode: false,
   });
   timedLog("insight", insightStarted);
@@ -225,6 +241,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
       locale: form.locale,
       latitude: form.latitude,
       longitude: form.longitude,
+      birthday: form.birthday,
       agentOverride: override,
     });
 
@@ -274,6 +291,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
           locale: form.locale,
           latitude: form.latitude,
           longitude: form.longitude,
+          birthday: form.birthday,
           agentOverride: override,
           onStage: (stage) => sendSse(reply, "status", { stage }),
           onAgent: (id) => {
@@ -286,16 +304,25 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
         return result.insight;
       })();
 
-      if (override === AgentId.FOOD_SCAN) {
+      if (override === AgentId.FOOD_SCAN || override === AgentId.PALM_READER) {
+        const steps =
+          override === AgentId.PALM_READER
+            ? PALM_READER_THINKING_STEPS
+            : FOOD_SCAN_THINKING_STEPS;
+        const delays =
+          override === AgentId.PALM_READER
+            ? PALM_READER_THINKING_STEP_DELAYS_MS
+            : FOOD_SCAN_THINKING_STEP_DELAYS_MS;
+
         let analyzeDone = false;
         void analyzePromise.then(() => {
           analyzeDone = true;
         });
 
-        for (const [index, step] of FOOD_SCAN_THINKING_STEPS.entries()) {
+        for (const [index, step] of steps.entries()) {
           if (analyzeDone) break;
           sendSse(reply, "thinking", { step, index });
-          const delay = FOOD_SCAN_THINKING_STEP_DELAYS_MS[index] ?? 0;
+          const delay = delays[index] ?? 0;
           if (delay <= 0) break;
           await Promise.race([analyzePromise, sleep(delay)]);
         }
@@ -434,6 +461,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
         { id: AgentId.STYLIST, name: "造型师", icon: "shirt" },
         { id: AgentId.FOOD_EXPLORER, name: "美食探索", icon: "utensils" },
         { id: AgentId.FOOD_SCAN, name: "食识拍", icon: "scan" },
+        { id: AgentId.PALM_READER, name: "看手相师", icon: "hand" },
         { id: AgentId.TEXT_READER, name: "文字解读", icon: "text" },
         { id: AgentId.GENERAL_CURIOSITY, name: "好奇心", icon: "sparkles" },
       ],

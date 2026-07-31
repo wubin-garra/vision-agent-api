@@ -49,6 +49,7 @@ export class InsightPlanner {
     imageCaption?: string | null;
     latitude?: number | null;
     longitude?: number | null;
+    birthday?: string | null;
     /** 手动选择的专项镜头：完整质量输出 */
     qualityMode?: boolean;
   }): Promise<StructuredInsight> {
@@ -61,6 +62,7 @@ export class InsightPlanner {
       imageCaption: input.imageCaption,
       latitude: input.latitude,
       longitude: input.longitude,
+      birthday: input.birthday,
       agentId: input.agentId,
       qualityMode: input.qualityMode,
     });
@@ -83,7 +85,13 @@ export function parseAgentOverride(
 ): AgentId | undefined {
   if (!value) return undefined;
   const parsed = agentIdSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) {
+    console.warn(
+      `[analyze] unknown agent_override="${value}", falling back to auto route`,
+    );
+    return undefined;
+  }
+  return parsed.data;
 }
 
 export const sceneRouter = new SceneRouter();

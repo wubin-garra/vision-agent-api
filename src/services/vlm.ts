@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import {
   FOLLOWUP_SYSTEM,
   FOOD_SCAN_FOLLOWUP_SYSTEM,
+  PALM_READER_FOLLOWUP_SYSTEM,
   ROUTER_SYSTEM,
 } from "../agents/prompts.js";
 import { settings } from "../config.js";
@@ -10,16 +11,29 @@ import { extractJson } from "../utils/jsonExtract.js";
 import {
   buildAnalyzeUserText,
   buildFollowupUserText,
+  formatBirthdayContext,
   formatGeoContext,
 } from "./context.js";
 import { visionService } from "./vision.js";
 
 function analyzeMaxTokens(agentId?: string, qualityMode?: boolean): number {
   if (qualityMode) {
-    if (agentId === "food_scan" || agentId === "food_explorer") return 3500;
+    if (
+      agentId === "food_scan" ||
+      agentId === "food_explorer" ||
+      agentId === "palm_reader"
+    ) {
+      return 3500;
+    }
     return 2500;
   }
-  if (agentId === "food_scan" || agentId === "food_explorer") return 2500;
+  if (
+    agentId === "food_scan" ||
+    agentId === "food_explorer" ||
+    agentId === "palm_reader"
+  ) {
+    return 2500;
+  }
   return 2000;
 }
 
@@ -27,10 +41,12 @@ function buildVisionAnalyzeUserText(input: {
   locale: string;
   latitude?: number | null;
   longitude?: number | null;
+  birthday?: string | null;
 }): string {
   return (
     `Locale: ${input.locale}\n` +
-    `${formatGeoContext(input.latitude, input.longitude)}\n\n` +
+    `${formatGeoContext(input.latitude, input.longitude)}\n` +
+    `${formatBirthdayContext(input.birthday)}\n\n` +
     "请直接根据图片输出结构化 JSON 洞察。" +
     "只输出合法 JSON，务必闭合所有字符串与括号。"
   );
@@ -132,12 +148,16 @@ export class VlmService {
     imageCaption?: string | null;
     latitude?: number | null;
     longitude?: number | null;
+    birthday?: string | null;
     agentId?: string;
     /** 专项镜头：优先 DeepSeek 完整输出，不走精简视觉直出 */
     qualityMode?: boolean;
   }): Promise<Record<string, unknown>> {
     const locale = input.locale ?? "zh-CN";
     if (this.demoMode) {
+      if (input.agentId === "palm_reader") {
+        return this.demoPalmReaderInsight(input.birthday);
+      }
       return this.demoInsight(locale);
     }
 
@@ -151,6 +171,7 @@ export class VlmService {
         locale,
         latitude: input.latitude,
         longitude: input.longitude,
+        birthday: input.birthday,
       });
       const runVision = (text: string) =>
         visionService.analyzeImageJson({
@@ -202,6 +223,7 @@ export class VlmService {
       caption,
       latitude: input.latitude,
       longitude: input.longitude,
+      birthday: input.birthday,
     });
 
     if (settings.debug) {
@@ -265,6 +287,9 @@ export class VlmService {
       if (input.agentId === "food_scan") {
         return this.demoFoodScanFollowup(input.question);
       }
+      if (input.agentId === "palm_reader") {
+        return this.demoPalmReaderFollowup(input.question);
+      }
       return {
         answer:
           `（Demo 模式）关于「${input.question}」：` +
@@ -288,11 +313,17 @@ export class VlmService {
     });
 
     const isFoodScan = input.agentId === "food_scan";
+    const isPalmReader = input.agentId === "palm_reader";
+    const systemPrompt = isFoodScan
+      ? FOOD_SCAN_FOLLOWUP_SYSTEM
+      : isPalmReader
+        ? PALM_READER_FOLLOWUP_SYSTEM
+        : FOLLOWUP_SYSTEM;
     return this.chatJson({
       model: settings.llmModel,
-      systemPrompt: isFoodScan ? FOOD_SCAN_FOLLOWUP_SYSTEM : FOLLOWUP_SYSTEM,
+      systemPrompt,
       userText,
-      maxTokens: isFoodScan ? 3500 : 1500,
+      maxTokens: isFoodScan || isPalmReader ? 3500 : 1500,
       retryOnParseError: true,
     });
   }
@@ -382,6 +413,177 @@ export class VlmService {
         "水浸和油浸金枪鱼热量差多少？",
         "减脂期适合吃哪些低卡酱料？",
         "附近有轻食/低卡餐厅吗？",
+      ],
+    };
+  }
+
+  private demoPalmReaderInsight(birthday?: string | null): Record<string, unknown> {
+    return {
+      title: "沉稳的远见者",
+      subtitle: "在动荡中保持内心秩序",
+      category: "手相解读 / 性格运势",
+      confidence: 0.82,
+      narrative:
+        "你的手掌宽厚且纹路清晰，展现出一种在动荡中依然能保持内心秩序的罕见力量。",
+      visible_clues: ["掌形宽厚", "主线清晰深长", "感情线末端趋平"],
+      context: {
+        cultural: "掌纹解读在东亚与西方皆有自我觉察传统。",
+        historical: null,
+        practical: "把年龄节点当作内省提醒，而非固定剧本。",
+      },
+      palm_reading: {
+        birthday: birthday ?? null,
+        zodiac: birthday ? "摩羯座" : null,
+        summary_traits: [
+          { label: "手型", value: "土型掌—务实且极具耐力" },
+          { label: "核心纹路", value: "智慧线平直，逻辑极强" },
+          { label: "独特标记", value: "木星丘饱满，具领导潜质" },
+        ],
+        insight_quote:
+          "你并不急于向世界证明什么，因为你深知，真正的力量往往在沉默的坚持中悄然生长。",
+        palm_lines: [
+          {
+            id: "heart",
+            name: "感情线",
+            color: "#E85D5D",
+            highlight: "32岁左右情感趋于稳固",
+            description:
+              "感情线末端趋平，指向食指与中指之间，显示你在情感上理性克制。这种纹路预示三十岁初将迎来从追求激情，到追求精神契合长期陪伴的深刻整合。",
+            path: [
+              { x: 28, y: 22 },
+              { x: 48, y: 20 },
+              { x: 72, y: 24 },
+            ],
+          },
+          {
+            id: "head",
+            name: "智慧线",
+            color: "#4A9FE8",
+            highlight: "38岁迎来事业决策巅峰",
+            description:
+              "智慧线深长清晰，反映你具备极强的专注力与逻辑分析能力。约四十岁前后可能迎来重大事业转向，或显著的社会地位提升。",
+            path: [
+              { x: 30, y: 38 },
+              { x: 55, y: 40 },
+              { x: 78, y: 44 },
+            ],
+          },
+          {
+            id: "life",
+            name: "生命线",
+            color: "#3DB88A",
+            highlight: "50岁后精力依然充沛",
+            description:
+              "生命线起点紧凑、末端开阔，早年或有忙碌奔波，但精力与稳定感随年龄增长，晚年生活质量较高。",
+            path: [
+              { x: 42, y: 28 },
+              { x: 34, y: 48 },
+              { x: 36, y: 72 },
+            ],
+          },
+          {
+            id: "career",
+            name: "事业线",
+            color: "#F0A04B",
+            highlight: "28岁开启独立发展之路",
+            description:
+              "事业线自掌根清晰上升，越过智慧线后加深，暗示二十年代末找到真正志业，并逐步建立专业影响力。",
+            path: [
+              { x: 52, y: 78 },
+              { x: 54, y: 55 },
+              { x: 56, y: 32 },
+            ],
+          },
+        ],
+        personality_spectrum: [
+          { low_label: "理性冷静", high_label: "感性直觉", value: 0.32 },
+          { low_label: "务实稳健", high_label: "自由随性", value: 0.4 },
+        ],
+        compatibility_teaser: "看看你和重要的人有多匹配",
+      },
+      explore_chips: {
+        culinary: [
+          "我的感情线说明什么？",
+          "事业线高峰会在什么时候？",
+          "结合星座再解读一次",
+        ],
+        nearby: [],
+      },
+      share_card: {
+        headline: "沉稳的远见者",
+        quote:
+          "真正的力量往往在沉默的坚持中悄然生长。",
+        cta: "继续看见自己",
+      },
+      style_vocabulary: ["远见", "克制", "秩序"],
+      suggested_searches: [],
+      next_actions: [],
+      agent_id: "palm_reader",
+      disclaimer: "手相解读仅供娱乐与自我觉察参考，非命运预言或专业命理鉴定。",
+    };
+  }
+
+  private demoPalmReaderFollowup(question: string): Record<string, unknown> {
+    return {
+      answer:
+        `关于「${question}」：你的感情线末端趋平，显示理性克制；` +
+        "三十岁初更可能追求精神契合的长期关系。",
+      structured_answer: {
+        summary:
+          "感情线末端趋平并指向食指与中指之间，说明你在情感上理性而克制，" +
+          "更重视长期精神契合而非短暂热情。",
+        sections: [
+          {
+            heading: "感情线的深层含义",
+            paragraphs: [
+              "这种纹路常对应「慢热」与边界清晰：你不会轻易交托信任，但一旦确认，陪伴会很稳。",
+            ],
+            assessments: [
+              {
+                tone: "positive",
+                title: "情感边界清晰",
+                body: "不易被情绪裹挟，关系中更有安全感。",
+              },
+              {
+                tone: "warning",
+                title: "表达偏克制",
+                body: "对方可能误读为疏离，适时用语言确认很重要。",
+              },
+            ],
+            tips_heading: "觉察小提示",
+            tips_lead: "你可以这样理解：",
+            tips: [
+              {
+                label: "关系节奏",
+                body: "允许自己慢一点，用行动而非宣言建立信任。",
+              },
+            ],
+          },
+        ],
+        metric_card: {
+          title: "性格光谱",
+          sliders: [
+            {
+              label: "理性 ↔ 感性",
+              value: 0.32,
+              low_label: "理性",
+              high_label: "感性",
+            },
+          ],
+          note: "当前更偏理性冷静，适合用结构化沟通表达心意。",
+        },
+        remark: "手相解读仅供娱乐与自我觉察参考。",
+        suggestion_groups: [
+          {
+            title: "继续探索",
+            questions: ["事业线高峰会在什么时候？", "结合星座再解读一次"],
+          },
+        ],
+      },
+      suggested_followups: [
+        "事业线高峰会在什么时候？",
+        "结合星座再解读一次",
+        "生命线说明我精力如何？",
       ],
     };
   }

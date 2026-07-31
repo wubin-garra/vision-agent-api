@@ -37,6 +37,14 @@ Health：http://localhost:8000/health
 | `npm start` | 直接启动 |
 | `npm run typecheck` | TypeScript 检查 |
 
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [docs/dev-pitfalls.md](docs/dev-pitfalls.md) | 全栈开发坑点（含 API / 移动端） |
+
+产品 / 埋点 / 食识拍文档在移动端仓库：`../vision-agent-mobile/docs/`
+
 ## 目录约定
 
 - `src/routes/*`：HTTP 适配（multipart / SSE / JSON）

@@ -7,6 +7,7 @@ export const AgentId = {
   STYLIST: "stylist",
   FOOD_EXPLORER: "food_explorer",
   FOOD_SCAN: "food_scan",
+  PALM_READER: "palm_reader",
   TEXT_READER: "text_reader",
   GENERAL_CURIOSITY: "general_curiosity",
 } as const;
@@ -20,6 +21,7 @@ export const agentIdSchema = z.enum([
   "stylist",
   "food_explorer",
   "food_scan",
+  "palm_reader",
   "text_reader",
   "general_curiosity",
 ]);
@@ -100,6 +102,46 @@ export const nutritionTipSchema = z.object({
   body: z.string(),
 });
 
+/** 手相线标注点：相对掌心图百分比坐标 0-100 */
+export const palmPointSchema = z.object({
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+});
+
+export const palmLineSchema = z.object({
+  id: z.enum(["heart", "head", "life", "career"]),
+  name: z.string(),
+  color: z.string().default("#4A9FE8"),
+  /** 一句年龄/命运高光，如「32岁左右情感趋于稳固」 */
+  highlight: z.string(),
+  description: z.string(),
+  /** 用于叠加虚线轨迹的相对坐标（约 3-6 点） */
+  path: z.array(palmPointSchema).default([]),
+});
+
+export const personalitySliderSchema = z.object({
+  low_label: z.string(),
+  high_label: z.string(),
+  value: z.number().min(0).max(1),
+});
+
+/** Chance 摘要特质：手型 / 核心纹路 / 独特标记 */
+export const palmSummaryTraitSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+
+export const palmReadingSchema = z.object({
+  birthday: z.string().nullish(),
+  zodiac: z.string().nullish(),
+  insight_quote: z.string().nullish(),
+  /** Chance 顶部摘要卡，建议 3 条：手型、核心纹路、独特标记 */
+  summary_traits: z.array(palmSummaryTraitSchema).default([]),
+  palm_lines: z.array(palmLineSchema).default([]),
+  personality_spectrum: z.array(personalitySliderSchema).default([]),
+  compatibility_teaser: z.string().nullish(),
+});
+
 export const structuredInsightSchema = z.object({
   title: z.string(),
   category: z.string(),
@@ -121,6 +163,7 @@ export const structuredInsightSchema = z.object({
   allergens: z.array(allergenItemSchema).default([]),
   nutrition_tips: z.array(nutritionTipSchema).default([]),
   diet_summary: z.string().nullish(),
+  palm_reading: palmReadingSchema.nullish(),
 });
 
 export type StructuredInsight = z.infer<typeof structuredInsightSchema>;

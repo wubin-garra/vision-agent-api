@@ -108,6 +108,63 @@ export const palmPointSchema = z.object({
   y: z.number().min(0).max(100),
 });
 
+/** 把模型偶发的扁平数字 / [x,y] 元组规范成 {x,y}[] */
+export function normalizePalmPath(raw: unknown): Array<{ x: number; y: number }> {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+
+  // [{x,y}, ...]
+  if (
+    typeof raw[0] === "object" &&
+    raw[0] !== null &&
+    ("x" in (raw[0] as object) || "y" in (raw[0] as object))
+  ) {
+    return raw
+      .map((p) => {
+        if (!p || typeof p !== "object") return null;
+        const o = p as Record<string, unknown>;
+        const x = Number(o.x);
+        const y = Number(o.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return {
+          x: Math.min(100, Math.max(0, x)),
+          y: Math.min(100, Math.max(0, y)),
+        };
+      })
+      .filter((p): p is { x: number; y: number } => p !== null);
+  }
+
+  // [[x,y], [x,y], ...]
+  if (Array.isArray(raw[0])) {
+    return raw
+      .map((pair) => {
+        if (!Array.isArray(pair) || pair.length < 2) return null;
+        const x = Number(pair[0]);
+        const y = Number(pair[1]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return {
+          x: Math.min(100, Math.max(0, x)),
+          y: Math.min(100, Math.max(0, y)),
+        };
+      })
+      .filter((p): p is { x: number; y: number } => p !== null);
+  }
+
+  // [x0,y0,x1,y1,...] 扁平数字
+  if (typeof raw[0] === "number" || typeof raw[0] === "string") {
+    const nums = raw.map((n) => Number(n)).filter((n) => Number.isFinite(n));
+    const points: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+      points.push({
+        x: Math.min(100, Math.max(0, nums[i]!)),
+        y: Math.min(100, Math.max(0, nums[i + 1]!)),
+      });
+    }
+    return points;
+  }
+
+  return [];
+}
+
 export const palmLineSchema = z.object({
   id: z.enum(["heart", "head", "life", "career"]),
   name: z.string(),
@@ -116,7 +173,7 @@ export const palmLineSchema = z.object({
   highlight: z.string(),
   description: z.string(),
   /** 用于叠加虚线轨迹的相对坐标（约 3-6 点） */
-  path: z.array(palmPointSchema).default([]),
+  path: z.preprocess(normalizePalmPath, z.array(palmPointSchema)).default([]),
 });
 
 export const personalitySliderSchema = z.object({

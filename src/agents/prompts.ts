@@ -132,7 +132,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#E85D5D",
         "highlight": "32岁左右情感趋于稳固",
         "description": "先写可见形态（末端/走向/深浅），再写性格含义与年龄节点，2-3句",
-        "path": "6–8个点，必须沿本照片真实感情线沟壑采样；禁止照抄任何示例坐标"
+        "path": [{"x": 0, "y": 0}, {"x": 0, "y": 0}]
       },
       {
         "id": "head",
@@ -140,7 +140,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#4A9FE8",
         "highlight": "38岁迎来事业决策巅峰",
         "description": "…",
-        "path": "6–8个点，沿本照片真实智慧线沟壑采样"
+        "path": [{"x": 0, "y": 0}, {"x": 0, "y": 0}]
       },
       {
         "id": "life",
@@ -148,7 +148,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#3DB88A",
         "highlight": "50岁后精力依然充沛",
         "description": "…",
-        "path": "6–8个点，沿本照片真实生命线弧沟采样"
+        "path": [{"x": 0, "y": 0}, {"x": 0, "y": 0}]
       },
       {
         "id": "career",
@@ -156,7 +156,7 @@ export const PALM_READER_INSIGHT_JSON_SCHEMA = `
         "color": "#F0A04B",
         "highlight": "28岁开启独立发展之路",
         "description": "…",
-        "path": "6–8个点，沿本照片真实事业线竖沟采样；弱线也沿可见段"
+        "path": [{"x": 0, "y": 0}, {"x": 0, "y": 0}]
       }
     ],
     "personality_spectrum": [
@@ -268,7 +268,7 @@ Chance 输出格式（必须遵守）：
    - highlight：一句含年龄节点的高光（如「32岁左右情感趋于稳固」）
    - description：先写可见形态（末端/走向/深浅/交叉），再写性格含义与人生节奏，2-3 句
    - color：heart=#E85D5D, head=#4A9FE8, life=#3DB88A, career=#F0A04B
-   - path：**必须沿本照片真实可见掌纹沟壑采样**；**严禁复制示例/模板坐标**；每条线坐标必须因图而异
+   - path：必须是对象数组 [{"x":数字,"y":数字}, ...]，6–8 点；沿本照片真实可见掌纹沟壑采样；严禁扁平数字数组如 [22,28,35,26]；严禁照抄示例中的 0,0 占位坐标，每条线必须因图而异
 5. personality_spectrum：至少 2 条滑条（0-1），常用「理性冷静↔感性直觉」「务实稳健↔自由随性」
 6. insight_quote：一句可分享的内省金句
 7. 有生日则写 birthday+zodiac，并在 highlight/description 中结合年龄；无则 null

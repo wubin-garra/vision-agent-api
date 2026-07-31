@@ -3,11 +3,26 @@ import { sanitizePalmInsight } from "./palmSanitize.js";
 import {
   AgentId,
   agentIdSchema,
+  normalizePalmPath,
   sceneClassificationSchema,
   structuredInsightSchema,
   type StructuredInsight,
 } from "../schemas/insight.js";
 import { vlmService } from "../services/vlm.js";
+
+/** 校验前把 palm_lines.path 各种畸形格式归一成 {x,y}[] */
+function normalizePalmReadingRaw(raw: Record<string, unknown>): void {
+  const reading = raw.palm_reading;
+  if (!reading || typeof reading !== "object") return;
+  const pr = reading as Record<string, unknown>;
+  const lines = pr.palm_lines;
+  if (!Array.isArray(lines)) return;
+  for (const line of lines) {
+    if (!line || typeof line !== "object") continue;
+    const l = line as Record<string, unknown>;
+    l.path = normalizePalmPath(l.path);
+  }
+}
 
 export class SceneRouter {
   async route(input: {
@@ -68,6 +83,9 @@ export class InsightPlanner {
       qualityMode: input.qualityMode,
     });
     raw.agent_id = input.agentId;
+    if (input.agentId === AgentId.PALM_READER) {
+      normalizePalmReadingRaw(raw);
+    }
     const parsed = structuredInsightSchema.safeParse(raw);
     if (!parsed.success) {
       throw new Error(

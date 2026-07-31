@@ -9,6 +9,7 @@ export const AgentId = {
   FOOD_SCAN: "food_scan",
   PALM_READER: "palm_reader",
   TEXT_READER: "text_reader",
+  MENU_TRANSLATOR: "menu_translator",
   GENERAL_CURIOSITY: "general_curiosity",
 } as const;
 
@@ -23,6 +24,7 @@ export const agentIdSchema = z.enum([
   "food_scan",
   "palm_reader",
   "text_reader",
+  "menu_translator",
   "general_curiosity",
 ]);
 

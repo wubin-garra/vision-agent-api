@@ -490,13 +490,11 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
     return {
       agents: [
         { id: AgentId.LOCAL_GUIDE, name: "本地向导", icon: "map" },
-        { id: AgentId.ART_CRITIC, name: "艺术评论家", icon: "palette" },
-        { id: AgentId.DESIGN_CRITIC, name: "设计评论家", icon: "chair" },
         { id: AgentId.STYLIST, name: "造型师", icon: "shirt" },
-        { id: AgentId.FOOD_EXPLORER, name: "美食探索", icon: "utensils" },
+        { id: AgentId.FOOD_EXPLORER, name: "零食分析", icon: "cookie" },
         { id: AgentId.FOOD_SCAN, name: "食识拍", icon: "scan" },
         { id: AgentId.PALM_READER, name: "看手相师", icon: "hand" },
-        { id: AgentId.TEXT_READER, name: "文字解读", icon: "text" },
+        { id: AgentId.MENU_TRANSLATOR, name: "翻译师", icon: "languages" },
         { id: AgentId.GENERAL_CURIOSITY, name: "好奇心", icon: "sparkles" },
       ],
     };

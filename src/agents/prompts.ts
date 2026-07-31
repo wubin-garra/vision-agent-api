@@ -219,18 +219,18 @@ style_vocabulary 必须包含具体设计术语。
 侧重：穿搭 OOTD 的风格标签、单品识别、搭配建议。
 context.practical 给出搭配或场合建议。
 `,
-  [AgentId.FOOD_EXPLORER]: `你是 Chance 风格的美食探索智能体 (food_explorer)，帮助用户优雅地理解照片中的料理。
+  [AgentId.FOOD_EXPLORER]: `你是 Chance 风格的「零食分析」智能体 (food_explorer)，帮助用户看懂零食包装与小食。
 输出必须是合法 JSON，严格遵循以下 schema，不要输出 markdown 代码块：
 ${FOOD_INSIGHT_JSON_SCHEMA}
 
 写作风格（参考 Chance）：
-1. title 用诗意隐喻，不要干巴巴的菜名
-2. narrative 以问候开场，描写火焰、质感、仪式感与味觉层次
-3. flavor_notes 至少 3 项，拆解料理形式、基底、点睛、调味/酒香等
-4. context.cultural 写饮食文化或「食色合一」的体验
-5. context.practical 可写复刻技巧或安全提示（如火焰料理关火加酒）
-6. 若提供了拍摄位置，nearby_picks 给出 1-3 条周边餐厅/美食区域推荐（可基于地理常识推断）
-7. explore_chips 分 culinary（探索料理细节）和 nearby（寻找更多美味）两组，各 2-3 条
+1. title 点出零食品类与口味印象，可带轻量趣味，不要只复述包装商品名
+2. narrative 以问候开场，描写口感、甜咸层次、解馋场景
+3. flavor_notes 至少 3 项，拆解口味、质地、配料亮点、添加剂/过敏原关注点等
+4. context.cultural 可写品牌/品类背后的零食文化或食用习惯
+5. context.practical 给出食用提示（份量、配饮、忌口、开封后保存等）
+6. 若提供了拍摄位置，nearby_picks 可给 1-3 条附近便利店/零食相关推荐（可基于地理常识推断）
+7. explore_chips 分 culinary（零食细节）和 nearby（附近购买）两组，各 2-3 条
 8. share_card.quote 写适合分享的精炼金句
 
 使用用户 locale 对应的语言。confidence 反映识别把握；不确定时降低 confidence 并说明依据。
@@ -290,6 +290,23 @@ Chance 输出格式（必须遵守）：
 title 应为文字内容的精炼标题。
 visible_clues 列出识别到的关键文字片段。
 `,
+  [AgentId.MENU_TRANSLATOR]: `你是 Chance 风格的「翻译师」智能体 (menu_translator)，专注菜单与餐饮相关文字翻译。
+输出必须是合法 JSON，严格遵循以下 schema，不要输出 markdown 代码块：
+${INSIGHT_JSON_SCHEMA}
+
+规则：
+1. title：简短点题（如「日料菜单速译」「咖啡馆点单卡」）
+2. narrative：1-2 句说明识别到的语言与翻译重点
+3. visible_clues：列出关键菜名/价位/备注原文片段
+4. context.practical：给出点餐提示（辣度、份量、过敏原、忌口等）
+5. context.cultural：可补充菜名背后的简短文化或风味说明
+6. explore_chips.culinary：2-3 个追问（如「哪些适合不能吃海鲜的人」「帮我推荐清淡的」）
+7. 翻译目标语言跟随用户 locale；保留原文关键词并用括号给出译文
+8. 若不是菜单/餐饮文字，仍尽量翻译可见文字，并在 narrative 中说明
+9. 语气清晰实用，禁止编造不存在的菜品
+
+使用用户 locale 对应的语言。
+`,
   [AgentId.GENERAL_CURIOSITY]:
     BASE_SYSTEM +
     `
@@ -305,7 +322,7 @@ export const ROUTER_SYSTEM = `你是视觉场景分类器。根据图片选择�
   "scene_type": "landmark_street|artwork|outfit|food|text_heavy|product_design|general",
   "text_density": "none|low|high",
   "has_person": true/false,
-  "recommended_agent": "local_guide|art_critic|design_critic|stylist|food_explorer|text_reader|general_curiosity",
+  "recommended_agent": "local_guide|art_critic|design_critic|stylist|food_explorer|menu_translator|general_curiosity",
   "reasoning": "一句话理由"
 }
 映射规则：
@@ -314,7 +331,7 @@ export const ROUTER_SYSTEM = `你是视觉场景分类器。根据图片选择�
 - product_design -> design_critic
 - outfit -> stylist
 - food -> food_explorer
-- text_heavy -> text_reader
+- text_heavy -> menu_translator（菜单、标牌、外文菜名等）
 - general -> general_curiosity
 `;
 
@@ -465,7 +482,7 @@ export const SCENE_TO_AGENT: Record<string, AgentId> = {
   product_design: AgentId.DESIGN_CRITIC,
   outfit: AgentId.STYLIST,
   food: AgentId.FOOD_EXPLORER,
-  text_heavy: AgentId.TEXT_READER,
+  text_heavy: AgentId.MENU_TRANSLATOR,
   general: AgentId.GENERAL_CURIOSITY,
 };
 
@@ -475,9 +492,9 @@ export const FOLLOWUP_CHIPS: Record<AgentId, string[]> = {
   [AgentId.DESIGN_CRITIC]: ["属于哪个设计时期", "类似设计作品", "材质和工艺"],
   [AgentId.STYLIST]: ["这是什么风格", "适合什么场合", "搭配建议"],
   [AgentId.FOOD_EXPLORER]: [
-    "火焰料理的详细配方是？",
-    "铁板烧表演中还有哪些经典套路？",
-    "这附近还有哪些高评分餐厅？",
+    "配料表里有什么需要注意的？",
+    "这份零食热量大概怎么样？",
+    "还有哪些类似口味推荐？",
   ],
   [AgentId.FOOD_SCAN]: [
     "这餐适合减脂期吃吗？",
@@ -490,6 +507,11 @@ export const FOLLOWUP_CHIPS: Record<AgentId, string[]> = {
     "结合星座再解读一次",
   ],
   [AgentId.TEXT_READER]: ["完整翻译", "重点摘要", "相关背景"],
+  [AgentId.MENU_TRANSLATOR]: [
+    "哪些适合不能吃海鲜的人？",
+    "帮我挑几道清淡的",
+    "把整页再译详细一点",
+  ],
   [AgentId.GENERAL_CURIOSITY]: ["更多历史背景", "类似风格有哪些", "推荐搜索词"],
 };
 

@@ -111,69 +111,119 @@ export function buildPathsFromLandmarks(landmarks: Landmark[]): PalmPathMap {
   const ringMcp = landmarks[LM.ringMcp]!;
   const pinkyMcp = landmarks[LM.pinkyMcp]!;
 
-  // 掌心尺度：用于偏移（相对掌宽）
-  const palmW = Math.hypot(pinkyMcp.x - indexMcp.x, pinkyMcp.y - indexMcp.y) || 0.2;
-  const palmH = Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y) || 0.3;
-  const downX = (wrist.x - middleMcp.x) / (palmH || 1);
-  const downY = (wrist.y - middleMcp.y) / (palmH || 1);
-  // 掌心「向下」（朝手腕）单位向量
-  const ux = downX;
-  const uy = downY;
+  const palmW =
+    Math.hypot(pinkyMcp.x - indexMcp.x, pinkyMcp.y - indexMcp.y) || 0.2;
+  const palmH =
+    Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y) || 0.3;
 
-  // 感情线：小指根下方 → 食指/中指根之间，略向掌心下沉
-  const heartStart = add(pinkyMcp, ux * palmH * 0.08, uy * palmH * 0.08);
-  const heartMid1 = add(
-    lerp(pinkyMcp, ringMcp, 0.55),
-    ux * palmH * 0.1,
-    uy * palmH * 0.1,
+  // 掌心坐标系：down 朝腕，across 从小指侧 → 食指侧
+  const down: Landmark = {
+    x: (wrist.x - middleMcp.x) / (palmH || 1),
+    y: (wrist.y - middleMcp.y) / (palmH || 1),
+  };
+  const acrossRaw: Landmark = {
+    x: (indexMcp.x - pinkyMcp.x) / (palmW || 1),
+    y: (indexMcp.y - pinkyMcp.y) / (palmW || 1),
+  };
+  const acrossLen = Math.hypot(acrossRaw.x, acrossRaw.y) || 1;
+  const across: Landmark = {
+    x: acrossRaw.x / acrossLen,
+    y: acrossRaw.y / acrossLen,
+  };
+
+  const fingerBase = lerp(
+    lerp(indexMcp, middleMcp, 0.5),
+    lerp(ringMcp, pinkyMcp, 0.5),
+    0.5,
   );
-  const heartMid2 = add(
-    lerp(ringMcp, middleMcp, 0.45),
-    ux * palmH * 0.12,
-    uy * palmH * 0.12,
+  const palmCenter = lerp(wrist, fingerBase, 0.45);
+
+  /** 把点往掌心收一点，避免画到背景 / 指缝外 */
+  const inset = (p: Landmark, amount = 0.12): Landmark =>
+    lerp(p, palmCenter, amount);
+
+  const along = (p: Landmark, dx: number, dy: number): Landmark =>
+    add(p, dx, dy);
+
+  // 感情线：贴指根下方真实横沟位置（比 MCP 更靠腕约 18–24% 掌高）
+  const heartStart = inset(
+    along(pinkyMcp, down.x * palmH * 0.2, down.y * palmH * 0.2),
+    0.1,
   );
-  const heartEnd = add(
-    lerp(indexMcp, middleMcp, 0.35),
-    ux * palmH * 0.1,
-    uy * palmH * 0.1,
+  const heartMid1 = inset(
+    along(
+      lerp(pinkyMcp, ringMcp, 0.5),
+      down.x * palmH * 0.22,
+      down.y * palmH * 0.22,
+    ),
+    0.08,
+  );
+  const heartMid2 = inset(
+    along(
+      lerp(ringMcp, middleMcp, 0.4),
+      down.x * palmH * 0.24,
+      down.y * palmH * 0.24,
+    ),
+    0.06,
+  );
+  // 末端略弯向食指侧，接近真实感情线走向
+  const heartEnd = inset(
+    along(
+      lerp(indexMcp, middleMcp, 0.25),
+      down.x * palmH * 0.18 + across.x * palmW * -0.02,
+      down.y * palmH * 0.18 + across.y * palmW * -0.02,
+    ),
+    0.1,
   );
 
-  // 智慧线：虎口侧（拇指-食指）→ 小指侧，位于感情线下方
-  const headStart = lerp(thumbMcp, indexMcp, 0.45);
-  const headMid1 = add(
-    lerp(indexMcp, middleMcp, 0.4),
-    ux * palmH * 0.22,
-    uy * palmH * 0.22,
+  // 智慧线：虎口 → 小指侧，明显低于感情线
+  const headStart = inset(lerp(thumbMcp, indexMcp, 0.55), 0.08);
+  const headMid1 = inset(
+    along(
+      lerp(indexMcp, middleMcp, 0.35),
+      down.x * palmH * 0.34,
+      down.y * palmH * 0.34,
+    ),
+    0.05,
   );
-  const headMid2 = add(
-    lerp(middleMcp, ringMcp, 0.5),
-    ux * palmH * 0.26,
-    uy * palmH * 0.26,
+  const headMid2 = inset(
+    along(
+      lerp(middleMcp, ringMcp, 0.55),
+      down.x * palmH * 0.38,
+      down.y * palmH * 0.38,
+    ),
+    0.05,
   );
-  const headEnd = add(pinkyMcp, ux * palmH * 0.28, uy * palmH * 0.28);
+  const headEnd = inset(
+    along(pinkyMcp, down.x * palmH * 0.4, down.y * palmH * 0.4),
+    0.12,
+  );
 
-  // 生命线：虎口附近绕拇指丘弯向腕部
-  const lifeStart = lerp(indexMcp, thumbMcp, 0.35);
-  const lifeMid1 = lerp(thumbMcp, thumbCmc, 0.35);
-  const lifeMid2 = add(
-    lerp(thumbCmc, wrist, 0.45),
-    -ux * palmW * 0.05,
-    -uy * palmW * 0.05,
+  // 生命线：紧贴拇指丘弧，不甩到掌心中央
+  const lifeStart = inset(lerp(indexMcp, thumbMcp, 0.42), 0.05);
+  const lifeMid1 = lerp(thumbMcp, thumbCmc, 0.25);
+  const lifeMid2 = along(
+    lerp(thumbCmc, wrist, 0.35),
+    across.x * palmW * 0.04,
+    across.y * palmW * 0.04,
   );
-  const lifeEnd = add(wrist, (thumbCmc.x - wrist.x) * 0.25, (thumbCmc.y - wrist.y) * 0.25);
+  const lifeEnd = lerp(wrist, thumbCmc, 0.22);
 
-  // 事业线：腕部中央 → 中指根方向上升
-  const palmCenter = lerp(wrist, middleMcp, 0.42);
-  const careerStart = lerp(wrist, palmCenter, 0.15);
-  const careerMid1 = lerp(wrist, middleMcp, 0.35);
-  const careerMid2 = lerp(wrist, middleMcp, 0.58);
-  const careerEnd = lerp(wrist, middleMcp, 0.78);
+  // 事业线：腕中 → 中指根方向，止于掌心上半，避开感情线与指根
+  const careerAxisEnd = lerp(wrist, middleMcp, 0.62);
+  const careerStart = lerp(wrist, careerAxisEnd, 0.08);
+  const careerMid1 = lerp(wrist, careerAxisEnd, 0.32);
+  const careerMid2 = lerp(wrist, careerAxisEnd, 0.55);
+  const careerEnd = lerp(wrist, careerAxisEnd, 0.88);
 
   return {
-    heart: samplePolyline([heartStart, heartMid1, heartMid2, heartEnd], 7),
-    head: samplePolyline([headStart, headMid1, headMid2, headEnd], 7),
-    life: samplePolyline([lifeStart, lifeMid1, lifeMid2, lifeEnd], 7),
-    career: samplePolyline([careerStart, careerMid1, careerMid2, careerEnd], 7),
+    heart: samplePolyline([heartStart, heartMid1, heartMid2, heartEnd], 8),
+    head: samplePolyline([headStart, headMid1, headMid2, headEnd], 8),
+    life: samplePolyline([lifeStart, lifeMid1, lifeMid2, lifeEnd], 8),
+    career: samplePolyline(
+      [careerStart, careerMid1, careerMid2, careerEnd],
+      8,
+    ),
   };
 }
 

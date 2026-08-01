@@ -201,7 +201,7 @@ export const palmReadingSchema = z.object({
   compatibility_teaser: z.string().nullish(),
 });
 
-/** 翻译师：单道菜/条目对照 */
+/** 翻译师：单道菜/条目对照（原文 + 译文必填） */
 export const menuDishSchema = z.object({
   original: z.string(),
   translation: z.string(),
@@ -210,6 +210,7 @@ export const menuDishSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
+/** 翻译师整页结果；旧 memory 无此字段时为 null，前端回退通用 UI */
 export const menuTranslationSchema = z.object({
   source_language: z.string().default(""),
   target_language: z.string().default(""),
@@ -218,7 +219,10 @@ export const menuTranslationSchema = z.object({
   dietary_summary: z.string().nullish(),
 });
 
-/** 零食分析：包装/小食结构化摘要 */
+/**
+ * 零食分析摘要（agent_id = food_explorer）。
+ * calories_estimate 用字符串以便同时表达「包装数值」与「估算」。
+ */
 export const snackAnalysisSchema = z.object({
   brand: z.string().nullish(),
   product_name: z.string().nullish(),
@@ -252,7 +256,9 @@ export const structuredInsightSchema = z.object({
   nutrition_tips: z.array(nutritionTipSchema).default([]),
   diet_summary: z.string().nullish(),
   palm_reading: palmReadingSchema.nullish(),
+  /** menu_translator */
   menu_translation: menuTranslationSchema.nullish(),
+  /** food_explorer（零食分析） */
   snack_analysis: snackAnalysisSchema.nullish(),
 });
 

@@ -16,6 +16,7 @@ import {
 } from "./context.js";
 import { visionService } from "./vision.js";
 
+/** 结构化字段多的 Agent 提高 max_tokens，避免 dishes / snack_analysis 被截断 */
 function analyzeMaxTokens(agentId?: string, qualityMode?: boolean): number {
   if (qualityMode) {
     if (
@@ -53,6 +54,7 @@ function buildVisionAnalyzeUserText(input: {
         "掌心主体清晰时必须给出具体手型、主线形态与至少一个标记。" +
         "palm_lines 的 path 可省略或给占位；重点写 highlight 与 description。"
       : "";
+  // 视觉直出路径的补充指令（与 AGENT_PROMPTS 互补，强调必填结构）
   const snackHint =
     input.agentId === "food_explorer"
       ? "\n\n这是零食分析：仔细读包装上的品名、口味、配料与过敏原。" +
@@ -627,6 +629,7 @@ export class VlmService {
     };
   }
 
+  /** Demo 模式：零食分析样例（无 LLM 时返回） */
   private demoSnackInsight(): Record<string, unknown> {
     return {
       title: "🧂 海盐脆片轻松解馋",
@@ -681,6 +684,7 @@ export class VlmService {
     };
   }
 
+  /** Demo 模式：翻译师样例，target_language 跟随 locale */
   private demoMenuTranslatorInsight(locale: string): Record<string, unknown> {
     const target = locale.startsWith("zh") ? "中文" : "English";
     return {

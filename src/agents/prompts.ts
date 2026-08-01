@@ -19,7 +19,10 @@ export const INSIGHT_JSON_SCHEMA = `
 }
 `;
 
-/** 零食分析专用（food_explorer） */
+/**
+ * 零食分析（food_explorer）输出 schema 示例。
+ * 与旧 FOOD_INSIGHT（菜品探索）区分：强调 snack_analysis + allergens。
+ */
 export const SNACK_INSIGHT_JSON_SCHEMA = `
 {
   "title": "带品类印象的标题，如「🧂 海盐脆片轻松解馋」",
@@ -71,7 +74,10 @@ export const SNACK_INSIGHT_JSON_SCHEMA = `
 }
 `;
 
-/** 翻译师专用（menu_translator） */
+/**
+ * 翻译师（menu_translator）输出 schema 示例。
+ * 菜名主体进 menu_translation.dishes，visible_clues 只放辅助线索。
+ */
 export const MENU_TRANSLATOR_INSIGHT_JSON_SCHEMA = `
 {
   "title": "简短点题，如「日料菜单速译」",

@@ -19,42 +19,101 @@ export const INSIGHT_JSON_SCHEMA = `
 }
 `;
 
-export const FOOD_INSIGHT_JSON_SCHEMA = `
+/** 零食分析专用（food_explorer） */
+export const SNACK_INSIGHT_JSON_SCHEMA = `
 {
-  "title": "诗意化菜名标题，如「火焰与冰霜的铁板交响」",
-  "subtitle": "一句话风味意象，如「每一场火光都是味蕾对温差的极致探索」",
-  "category": "菜系/场景，如「日式铁板烧 / 火焰甜点」",
+  "title": "带品类印象的标题，如「🧂 海盐脆片轻松解馋」",
+  "subtitle": "一句话口味/场景概括",
+  "category": "零食品类，如「薯片 / 咸香」",
   "confidence": 0.0-1.0,
-  "narrative": "2-4句优雅开场白，以「你好——」开头，描述画面、仪式感与味觉期待",
-  "visible_clues": ["可见线索1", "可见线索2"],
+  "narrative": "2-3句开场：问候 + 包装/外观 + 解馋场景，轻松不说教",
+  "visible_clues": ["包装可见文字/图案", "配料表关键词", "净含量或口味标识"],
   "context": {
-    "cultural": "饮食文化、仪式感、地域渊源",
-    "historical": "菜品起源或演变，可为null",
-    "practical": "复刻技巧、用餐建议或安全提示"
+    "cultural": "品牌或品类零食文化，可简短",
+    "historical": null,
+    "practical": "开封保存、配饮、份量控制等实用提示"
+  },
+  "snack_analysis": {
+    "brand": "品牌名或null（看不清则null）",
+    "product_name": "产品名或口味名",
+    "snack_type": "薯片/巧克力/坚果/软糖/饼干/饮料/其他",
+    "taste_tags": ["咸香", "微辣", "酥脆"],
+    "ingredients_highlight": ["马铃薯", "植物油", "海盐"],
+    "caution_notes": ["钠含量偏高，别整袋炫", "含麸质者慎选"],
+    "calories_estimate": "约 xxx kcal/份（包装可见则写，否则合理估算并注明）",
+    "serving_tip": "建议份量或搭配（如配无糖茶）"
   },
   "flavor_notes": [
-    {"emoji": "🔥", "label": "料理形式", "value": "法式火焰料理"},
-    {"emoji": "🍌", "label": "核心基底", "value": "黄油焦糖煎香蕉"},
-    {"emoji": "🍨", "label": "点睛之笔", "value": "香草冰淇淋球"},
-    {"emoji": "🥃", "label": "酒香因子", "value": "深色朗姆酒或白兰地"}
+    {"emoji": "👅", "label": "口味", "value": "海盐底、余韵干净"},
+    {"emoji": "🫰", "label": "口感", "value": "薄脆、分层感强"},
+    {"emoji": "🧪", "label": "配料关注", "value": "注意钠与添加剂"}
+  ],
+  "allergens": [
+    {"category": "麸质", "detail": "包装提示可能含小麦", "emoji": "🌾"}
   ],
   "nearby_picks": [
-    {"name": "餐厅或区域名", "blurb": "推荐理由，结合拍摄位置"}
+    {"name": "便利店或零食柜", "blurb": "结合拍摄位置的购买提示，可空数组"}
   ],
-  "style_vocabulary": ["风味关键词"],
-  "suggested_searches": ["推荐搜索词"],
-  "next_actions": ["建议下一步"],
   "explore_chips": {
-    "culinary": ["火焰香蕉甜点的详细配方是？", "铁板烧表演中还有哪些经典套路？"],
-    "nearby": ["这附近还有哪些高评分的日料店推荐？"]
+    "culinary": ["配料表里有什么需要注意的？", "这份零食热量大概怎么样？"],
+    "nearby": ["附近便利店还有类似口味吗？"]
   },
   "share_card": {
-    "headline": "分享标题，可与 title 相同或更精炼",
-    "quote": "适合分享的1-2句金句",
-    "cta": "引导继续探索的文案"
+    "headline": "分享标题",
+    "quote": "适合分享的1句解馋金句",
+    "cta": "继续拆零食"
   },
+  "style_vocabulary": ["酥脆", "咸香"],
+  "suggested_searches": [],
+  "next_actions": [],
   "agent_id": "food_explorer",
-  "disclaimer": "非鉴定/医疗/法律建议，仅供参考。"
+  "disclaimer": "零食分析与热量估算仅供参考，非营养医疗或过敏诊断建议。"
+}
+`;
+
+/** 翻译师专用（menu_translator） */
+export const MENU_TRANSLATOR_INSIGHT_JSON_SCHEMA = `
+{
+  "title": "简短点题，如「日料菜单速译」",
+  "subtitle": "源语言 → 目标语言，如「日文 → 中文」",
+  "category": "菜单翻译 / 点餐助手",
+  "confidence": 0.0-1.0,
+  "narrative": "1-2句：识别到的语言、菜单类型与翻译重点",
+  "visible_clues": ["可见栏目标题", "价位符号", "辣度/忌口图标"],
+  "context": {
+    "cultural": "菜名背后的简短文化或风味说明，可null",
+    "historical": null,
+    "practical": "总览式点餐提示（辣度、份量、忌口）"
+  },
+  "menu_translation": {
+    "source_language": "日文",
+    "target_language": "中文",
+    "dishes": [
+      {
+        "original": "原文菜名",
+        "translation": "译文菜名",
+        "price": "¥1280 或 null",
+        "notes": "辣度/份量/主料一句说明",
+        "tags": ["海鲜", "推荐"]
+      }
+    ],
+    "ordering_tips": ["想吃清淡选…", "海鲜过敏避开…"],
+    "dietary_summary": "忌口总览一句，或null"
+  },
+  "explore_chips": {
+    "culinary": ["哪些适合不能吃海鲜的人？", "帮我挑几道清淡的", "把整页再译详细一点"],
+    "nearby": []
+  },
+  "share_card": {
+    "headline": "分享标题",
+    "quote": "一句点餐小贴士",
+    "cta": "继续翻译"
+  },
+  "style_vocabulary": [],
+  "suggested_searches": [],
+  "next_actions": ["按忌口筛选", "推荐 3 道"],
+  "agent_id": "menu_translator",
+  "disclaimer": "翻译与点餐提示仅供参考，以店家实际出品与过敏原说明为准。"
 }
 `;
 
@@ -221,19 +280,21 @@ context.practical 给出搭配或场合建议。
 `,
   [AgentId.FOOD_EXPLORER]: `你是 Chance 风格的「零食分析」智能体 (food_explorer)，帮助用户看懂零食包装与小食。
 输出必须是合法 JSON，严格遵循以下 schema，不要输出 markdown 代码块：
-${FOOD_INSIGHT_JSON_SCHEMA}
+${SNACK_INSIGHT_JSON_SCHEMA}
 
-写作风格（参考 Chance）：
+写作与识别规则：
 1. title 点出零食品类与口味印象，可带轻量趣味，不要只复述包装商品名
-2. narrative 以问候开场，描写口感、甜咸层次、解馋场景
-3. flavor_notes 至少 3 项，拆解口味、质地、配料亮点、添加剂/过敏原关注点等
-4. context.cultural 可写品牌/品类背后的零食文化或食用习惯
-5. context.practical 给出食用提示（份量、配饮、忌口、开封后保存等）
-6. 若提供了拍摄位置，nearby_picks 可给 1-3 条附近便利店/零食相关推荐（可基于地理常识推断）
-7. explore_chips 分 culinary（零食细节）和 nearby（附近购买）两组，各 2-3 条
-8. share_card.quote 写适合分享的精炼金句
+2. narrative 以问候开场，描写口感、甜咸层次、解馋场景（2-3 句）
+3. **必须输出 snack_analysis**：brand/product_name/snack_type/taste_tags/ingredients_highlight/caution_notes；看不清的字段用 null 或空数组，禁止编造品牌
+4. flavor_notes 至少 3 项：口味、口感、配料关注（或类似维度）
+5. allergens：包装可见或原料可合理推断的过敏原；不确定则空数组并在 caution_notes 说明
+6. calories_estimate：包装有则照写；无则合理估算并注明「估算」
+7. context.practical：开封保存、配饮、份量；cultural 可写品类零食文化
+8. 若提供拍摄位置，nearby_picks 可给 1-3 条便利店/零食柜提示；否则可空
+9. explore_chips.culinary 2-3 个零食细节追问；nearby 0-2 个购买向追问
+10. 非零食图片时降低 confidence，在 narrative 说明，仍尽量完成可见信息解读
 
-使用用户 locale 对应的语言。confidence 反映识别把握；不确定时降低 confidence 并说明依据。
+使用用户 locale 对应的语言。confidence 反映识别把握。
 `,
   [AgentId.FOOD_SCAN]: `你是 Chance 风格的「食识拍」营养分析智能体 (food_scan)，扫描餐食并估算营养信息。
 输出必须是合法 JSON，严格遵循以下 schema，不要输出 markdown 代码块：
@@ -292,18 +353,22 @@ visible_clues 列出识别到的关键文字片段。
 `,
   [AgentId.MENU_TRANSLATOR]: `你是 Chance 风格的「翻译师」智能体 (menu_translator)，专注菜单与餐饮相关文字翻译。
 输出必须是合法 JSON，严格遵循以下 schema，不要输出 markdown 代码块：
-${INSIGHT_JSON_SCHEMA}
+${MENU_TRANSLATOR_INSIGHT_JSON_SCHEMA}
 
 规则：
-1. title：简短点题（如「日料菜单速译」「咖啡馆点单卡」）
-2. narrative：1-2 句说明识别到的语言与翻译重点
-3. visible_clues：列出关键菜名/价位/备注原文片段
-4. context.practical：给出点餐提示（辣度、份量、过敏原、忌口等）
-5. context.cultural：可补充菜名背后的简短文化或风味说明
-6. explore_chips.culinary：2-3 个追问（如「哪些适合不能吃海鲜的人」「帮我推荐清淡的」）
-7. 翻译目标语言跟随用户 locale；保留原文关键词并用括号给出译文
-8. 若不是菜单/餐饮文字，仍尽量翻译可见文字，并在 narrative 中说明
-9. 语气清晰实用，禁止编造不存在的菜品
+1. title：简短点题（如「日料菜单速译」「咖啡馆点单卡」）；subtitle 写「源语言 → 目标语言」
+2. narrative：1-2 句说明识别到的语言、菜单类型与翻译重点
+3. **必须输出 menu_translation**：
+   - source_language / target_language（目标语言跟随用户 locale）
+   - dishes：尽量列出图中可读菜品（建议 4–12 条）；每条含 original + translation；price/notes/tags 可知则填
+   - ordering_tips：2–4 条实用点餐建议
+   - dietary_summary：忌口总览一句（或 null）
+4. 禁止编造看不清的菜名或价格；模糊处在 notes 写「看不清」或省略该条
+5. visible_clues 只放辅助线索（栏目标题、图标含义），菜名主体放 dishes
+6. context.practical：总览点餐提示；cultural 可补充菜名文化，可 null
+7. explore_chips.culinary：2–3 个点餐向追问（忌口筛选、清淡推荐、再译详细等）
+8. 若不是菜单/餐饮文字：仍翻译可见文字进 dishes，并在 narrative 说明「非菜单」
+9. 语气清晰实用；disclaimer 提醒以店家实际出品为准
 
 使用用户 locale 对应的语言。
 `,

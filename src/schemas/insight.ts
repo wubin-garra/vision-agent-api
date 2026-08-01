@@ -201,6 +201,35 @@ export const palmReadingSchema = z.object({
   compatibility_teaser: z.string().nullish(),
 });
 
+/** 翻译师：单道菜/条目对照 */
+export const menuDishSchema = z.object({
+  original: z.string(),
+  translation: z.string(),
+  price: z.string().nullish(),
+  notes: z.string().nullish(),
+  tags: z.array(z.string()).default([]),
+});
+
+export const menuTranslationSchema = z.object({
+  source_language: z.string().default(""),
+  target_language: z.string().default(""),
+  dishes: z.array(menuDishSchema).default([]),
+  ordering_tips: z.array(z.string()).default([]),
+  dietary_summary: z.string().nullish(),
+});
+
+/** 零食分析：包装/小食结构化摘要 */
+export const snackAnalysisSchema = z.object({
+  brand: z.string().nullish(),
+  product_name: z.string().nullish(),
+  snack_type: z.string().default(""),
+  taste_tags: z.array(z.string()).default([]),
+  ingredients_highlight: z.array(z.string()).default([]),
+  caution_notes: z.array(z.string()).default([]),
+  calories_estimate: z.string().nullish(),
+  serving_tip: z.string().nullish(),
+});
+
 export const structuredInsightSchema = z.object({
   title: z.string(),
   category: z.string(),
@@ -223,6 +252,8 @@ export const structuredInsightSchema = z.object({
   nutrition_tips: z.array(nutritionTipSchema).default([]),
   diet_summary: z.string().nullish(),
   palm_reading: palmReadingSchema.nullish(),
+  menu_translation: menuTranslationSchema.nullish(),
+  snack_analysis: snackAnalysisSchema.nullish(),
 });
 
 export type StructuredInsight = z.infer<typeof structuredInsightSchema>;

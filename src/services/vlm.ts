@@ -21,6 +21,7 @@ function analyzeMaxTokens(agentId?: string, qualityMode?: boolean): number {
     if (
       agentId === "food_scan" ||
       agentId === "food_explorer" ||
+      agentId === "menu_translator" ||
       agentId === "palm_reader"
     ) {
       return 3500;
@@ -30,6 +31,7 @@ function analyzeMaxTokens(agentId?: string, qualityMode?: boolean): number {
   if (
     agentId === "food_scan" ||
     agentId === "food_explorer" ||
+    agentId === "menu_translator" ||
     agentId === "palm_reader"
   ) {
     return 2500;
@@ -51,6 +53,16 @@ function buildVisionAnalyzeUserText(input: {
         "掌心主体清晰时必须给出具体手型、主线形态与至少一个标记。" +
         "palm_lines 的 path 可省略或给占位；重点写 highlight 与 description。"
       : "";
+  const snackHint =
+    input.agentId === "food_explorer"
+      ? "\n\n这是零食分析：仔细读包装上的品名、口味、配料与过敏原。" +
+        "必须输出 snack_analysis；看不清的字段用 null/空数组，禁止编造品牌。"
+      : "";
+  const menuHint =
+    input.agentId === "menu_translator"
+      ? "\n\n这是菜单翻译：逐条识别可读菜名，填入 menu_translation.dishes（原文+译文）。" +
+        "禁止编造看不清的菜名或价格；目标语言跟随 locale。"
+      : "";
   const captionHint = input.imageCaption
     ? `\n参考视觉描述（可校正）：\n${input.imageCaption}\n`
     : "";
@@ -60,6 +72,8 @@ function buildVisionAnalyzeUserText(input: {
     `${formatBirthdayContext(input.birthday)}\n` +
     captionHint +
     palmHint +
+    snackHint +
+    menuHint +
     "\n请直接根据图片输出结构化 JSON 洞察。" +
     "只输出合法 JSON，务必闭合所有字符串与括号。"
   );
@@ -170,6 +184,12 @@ export class VlmService {
     if (this.demoMode) {
       if (input.agentId === "palm_reader") {
         return this.demoPalmReaderInsight(input.birthday);
+      }
+      if (input.agentId === "food_explorer") {
+        return this.demoSnackInsight();
+      }
+      if (input.agentId === "menu_translator") {
+        return this.demoMenuTranslatorInsight(locale);
       }
       return this.demoInsight(locale);
     }
@@ -604,6 +624,136 @@ export class VlmService {
         "结合星座再解读一次",
         "生命线说明我精力如何？",
       ],
+    };
+  }
+
+  private demoSnackInsight(): Record<string, unknown> {
+    return {
+      title: "🧂 海盐脆片轻松解馋",
+      subtitle: "薄脆咸香，适合配无糖气泡水",
+      category: "薯片 / 咸香",
+      confidence: 0.82,
+      narrative:
+        "你好——这袋海盐味脆片看起来主打干净咸香。薄片分层感强，适合当作电影或加班间隙的小份解馋，别一不小心炫完整袋。",
+      visible_clues: ["海盐口味标识", "薯片剪影图案", "净含量标注"],
+      context: {
+        cultural: "海盐原味薯片是便利店常备基础款，强调原料简单、口味不抢戏。",
+        historical: null,
+        practical: "开封后尽量当日吃完；配无糖茶或气泡水更清爽。",
+      },
+      snack_analysis: {
+        brand: "示例脆片",
+        product_name: "海盐原味薯片",
+        snack_type: "薯片",
+        taste_tags: ["咸香", "清爽", "酥脆"],
+        ingredients_highlight: ["马铃薯", "植物油", "海盐"],
+        caution_notes: ["钠含量偏高，建议小份食用", "可能含麸质加工助剂"],
+        calories_estimate: "约 140 kcal/30g（估算）",
+        serving_tip: "建议一次不超过一小把，搭配无糖饮料",
+      },
+      flavor_notes: [
+        { emoji: "👅", label: "口味", value: "海盐底、余韵干净" },
+        { emoji: "🫰", label: "口感", value: "薄脆、分层感强" },
+        { emoji: "🧪", label: "配料关注", value: "注意钠与可能的麸质" },
+      ],
+      allergens: [
+        { category: "麸质", detail: "加工过程可能接触小麦", emoji: "🌾" },
+      ],
+      nearby_picks: [],
+      explore_chips: {
+        culinary: [
+          "配料表里有什么需要注意的？",
+          "这份零食热量大概怎么样？",
+          "还有哪些类似口味推荐？",
+        ],
+        nearby: [],
+      },
+      share_card: {
+        headline: "海盐脆片轻松解馋",
+        quote: "小份刚刚好，解馋不翻车。",
+        cta: "继续拆零食",
+      },
+      style_vocabulary: ["酥脆", "咸香"],
+      suggested_searches: [],
+      next_actions: [],
+      agent_id: "food_explorer",
+      disclaimer: "零食分析与热量估算仅供参考，非营养医疗或过敏诊断建议。",
+    };
+  }
+
+  private demoMenuTranslatorInsight(locale: string): Record<string, unknown> {
+    const target = locale.startsWith("zh") ? "中文" : "English";
+    return {
+      title: "日料菜单速译",
+      subtitle: `日文 → ${target}`,
+      category: "菜单翻译 / 点餐助手",
+      confidence: 0.8,
+      narrative:
+        "识别到一份偏日料的纸质菜单，已把主要刺身与烤物条目译成你的语言，并标出海鲜相关提示。",
+      visible_clues: ["刺身栏", "价位符号 ¥", "「おすすめ」推荐角标"],
+      context: {
+        cultural: "日料菜单常按刺身、烤物、煮物分区，推荐角标多在当季品。",
+        historical: null,
+        practical: "海鲜过敏请避开刺身区；想清淡可先从豆腐或蔬菜小碗开始。",
+      },
+      menu_translation: {
+        source_language: "日文",
+        target_language: target,
+        dishes: [
+          {
+            original: "まぐろ刺身",
+            translation: "金枪鱼刺身",
+            price: "¥1,280",
+            notes: "生食，份量中等",
+            tags: ["海鲜", "推荐"],
+          },
+          {
+            original: "鮭の塩焼き",
+            translation: "盐烤三文鱼",
+            price: "¥980",
+            notes: "烤物，偏咸香",
+            tags: ["海鲜"],
+          },
+          {
+            original: "冷奴",
+            translation: "冷豆腐",
+            price: "¥480",
+            notes: "清淡开胃",
+            tags: ["素食友好"],
+          },
+          {
+            original: "枝豆",
+            translation: "毛豆",
+            price: "¥380",
+            notes: "小食",
+            tags: ["素食友好"],
+          },
+        ],
+        ordering_tips: [
+          "海鲜过敏请避开刺身与盐烤三文鱼",
+          "想吃清淡：冷豆腐 + 毛豆是稳妥组合",
+          "看到「おすすめ」多半是店家主推",
+        ],
+        dietary_summary: "本页含多道海鲜；素食可选冷豆腐与毛豆。",
+      },
+      explore_chips: {
+        culinary: [
+          "哪些适合不能吃海鲜的人？",
+          "帮我挑几道清淡的",
+          "把整页再译详细一点",
+        ],
+        nearby: [],
+      },
+      share_card: {
+        headline: "日料菜单速译",
+        quote: "先看忌口，再点推荐。",
+        cta: "继续翻译",
+      },
+      style_vocabulary: [],
+      suggested_searches: [],
+      next_actions: ["按忌口筛选", "推荐 3 道"],
+      agent_id: "menu_translator",
+      disclaimer: "翻译与点餐提示仅供参考，以店家实际出品与过敏原说明为准。",
     };
   }
 

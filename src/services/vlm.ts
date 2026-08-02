@@ -18,26 +18,19 @@ import { visionService } from "./vision.js";
 
 /** 结构化字段多的 Agent 提高 max_tokens，避免 dishes / snack_analysis 被截断 */
 function analyzeMaxTokens(agentId?: string, qualityMode?: boolean): number {
-  if (qualityMode) {
-    if (
-      agentId === "food_scan" ||
-      agentId === "food_explorer" ||
-      agentId === "menu_translator" ||
-      agentId === "palm_reader"
-    ) {
-      return 3500;
-    }
-    return 2500;
-  }
-  if (
+  const heavy =
     agentId === "food_scan" ||
     agentId === "food_explorer" ||
     agentId === "menu_translator" ||
-    agentId === "palm_reader"
-  ) {
-    return 2500;
+    agentId === "palm_reader" ||
+    agentId === "med_label" ||
+    agentId === "sight_route" ||
+    agentId === "hotel_guide" ||
+    agentId === "flight_info";
+  if (qualityMode) {
+    return heavy ? 3500 : 2500;
   }
-  return 2000;
+  return heavy ? 2500 : 2000;
 }
 
 function buildVisionAnalyzeUserText(input: {
@@ -65,6 +58,22 @@ function buildVisionAnalyzeUserText(input: {
       ? "\n\n这是菜单翻译：逐条识别可读菜名，填入 menu_translation.dishes（原文+译文）。" +
         "禁止编造看不清的菜名或价格；目标语言跟随 locale。"
       : "";
+  const medHint =
+    input.agentId === "med_label"
+      ? "\n\n这是药品说明：必须输出 med_label_reading；看不清的剂量/成分用 null，禁止编造医嘱。"
+      : "";
+  const sightHint =
+    input.agentId === "sight_route"
+      ? "\n\n这是景点路线：必须输出 sight_route，给出有序 suggested_route 与交通提示。"
+      : "";
+  const hotelHint =
+    input.agentId === "hotel_guide"
+      ? "\n\n这是酒店入住：必须输出 hotel_guide；确认号看不清则 null，steps 给出到店步骤。"
+      : "";
+  const flightHint =
+    input.agentId === "flight_info"
+      ? "\n\n这是航班信息：必须输出 flight_info；登机口可能变更，提醒以官方为准。"
+      : "";
   const captionHint = input.imageCaption
     ? `\n参考视觉描述（可校正）：\n${input.imageCaption}\n`
     : "";
@@ -76,6 +85,10 @@ function buildVisionAnalyzeUserText(input: {
     palmHint +
     snackHint +
     menuHint +
+    medHint +
+    sightHint +
+    hotelHint +
+    flightHint +
     "\n请直接根据图片输出结构化 JSON 洞察。" +
     "只输出合法 JSON，务必闭合所有字符串与括号。"
   );
@@ -192,6 +205,18 @@ export class VlmService {
       }
       if (input.agentId === "menu_translator") {
         return this.demoMenuTranslatorInsight(locale);
+      }
+      if (input.agentId === "med_label") {
+        return this.demoMedLabelInsight();
+      }
+      if (input.agentId === "sight_route") {
+        return this.demoSightRouteInsight();
+      }
+      if (input.agentId === "hotel_guide") {
+        return this.demoHotelGuideInsight();
+      }
+      if (input.agentId === "flight_info") {
+        return this.demoFlightInfoInsight();
       }
       return this.demoInsight(locale);
     }
@@ -758,6 +783,166 @@ export class VlmService {
       next_actions: ["按忌口筛选", "推荐 3 道"],
       agent_id: "menu_translator",
       disclaimer: "翻译与点餐提示仅供参考，以店家实际出品与过敏原说明为准。",
+    };
+  }
+
+  private demoMedLabelInsight(): Record<string, unknown> {
+    return {
+      title: "布洛芬退烧止痛",
+      subtitle: "英文 → 中文",
+      category: "药品说明 / 旅行药箱",
+      confidence: 0.82,
+      narrative: "这是一盒常见的布洛芬类止痛退烧药，包装为英文说明。",
+      visible_clues: ["Ibuprofen 200mg", "Pain Reliever", "Keep out of reach of children"],
+      context: {
+        cultural: null,
+        historical: null,
+        practical: "出国随身带原包装，过安检保留说明书更稳妥。",
+      },
+      med_label_reading: {
+        drug_name: "Ibuprofen",
+        brand: "DemoCare",
+        active_ingredients: ["布洛芬 200mg"],
+        usage: "用于缓解轻中度疼痛与发热（包装所示）",
+        dosage: "成人每 4–6 小时 1 片，24 小时不超过包装上限",
+        warnings: ["胃溃疡者慎用", "勿与其他含布洛芬产品叠服", "儿童用量需遵包装"],
+        storage: "室温干燥处保存",
+        translated_summary: "非处方止痛退烧药；先核对禁忌与剂量，不确定请问药师。",
+        source_language: "英文",
+      },
+      explore_chips: {
+        culinary: ["有哪些禁忌人群？", "用法用量再说明一下", "旅行携带需要注意什么？"],
+        nearby: [],
+      },
+      next_actions: ["核对剂量", "查看禁忌"],
+      agent_id: "med_label",
+      disclaimer: "非医疗诊断或用药建议，请遵医嘱与说明书原文。",
+    };
+  }
+
+  private demoSightRouteInsight(): Record<string, unknown> {
+    return {
+      title: "旧城区半日路线",
+      subtitle: "约 3–4 小时 · 步行友好",
+      category: "景点路线 / 旅行规划",
+      confidence: 0.8,
+      narrative: "画面像欧洲旧城区导览图，适合串一条少回头的半日线。",
+      visible_clues: ["古城墙标识", "中央广场", "河边步道"],
+      context: {
+        cultural: "旧城区多为步行区，街巷适合慢慢拍。",
+        historical: null,
+        practical: "热门点建议上午进，避开游轮团高峰。",
+      },
+      sight_route: {
+        place_name: "旧城区",
+        area: "市中心",
+        highlights: [
+          { name: "中央广场", tip: "适合拍建筑立面" },
+          { name: "河边步道", tip: "日落光线更好" },
+          { name: "观景台", tip: "可俯瞰红屋顶" },
+        ],
+        suggested_route: ["中央广场", "主教堂外立面", "河边步道", "观景台", "回广场咖啡"],
+        duration_estimate: "约 3.5 小时（含拍照）",
+        transport_tips: ["广场地铁站出站即达", "旧城内建议步行，电瓶车有时段限制"],
+        best_time: "上午 9–12 点人少光好",
+        ticket_notes: "观景台可能单独购票，现场扫码即可",
+      },
+      explore_chips: {
+        culinary: [],
+        nearby: ["附近还有什么值得去？", "下雨天怎么改路线？", "怎么买票最省事？"],
+      },
+      next_actions: ["优化步行路线", "找附近餐厅"],
+      agent_id: "sight_route",
+      disclaimer: "开放时间与票务可能变动，请以官方信息为准。",
+    };
+  }
+
+  private demoHotelGuideInsight(): Record<string, unknown> {
+    return {
+      title: "市中心酒店入住卡",
+      subtitle: "确认号 HX29K · 入住 15:00",
+      category: "酒店入住 / 旅行住宿",
+      confidence: 0.85,
+      narrative: "这是一张酒店确认/入住凭证截图，关键信息比较齐全。",
+      visible_clues: ["Hotel Nova", "Confirmation HX29K", "Check-in 15:00"],
+      context: {
+        cultural: null,
+        historical: null,
+        practical: "到店先报确认号与姓名；行李可问前台寄存。",
+      },
+      hotel_guide: {
+        hotel_name: "Hotel Nova",
+        confirmation_code: "HX29K",
+        guest_name: "WANG / LEI",
+        check_in: "15:00",
+        check_out: "11:00",
+        address: "12 River Street",
+        room_type: "Queen Room",
+        steps: [
+          "到大堂前台出示护照与确认号 HX29K",
+          "核对入住晚数与房型 Queen Room",
+          "领取房卡，问清早餐与 Wi‑Fi",
+        ],
+        amenities_notes: ["含早餐", "24h 前台"],
+        wifi_or_access: "房卡刷电梯；Wi‑Fi 密码向前提取",
+        contact: "+1 555 0100",
+      },
+      explore_chips: {
+        culinary: [],
+        nearby: ["怎么跟前台用英语说明？", "行李能提前寄放吗？", "附近交通怎么走？"],
+      },
+      next_actions: ["核对入住时间", "导航到酒店"],
+      agent_id: "hotel_guide",
+      disclaimer: "以酒店确认邮件/前台信息为准。",
+    };
+  }
+
+  private demoFlightInfoInsight(): Record<string, unknown> {
+    return {
+      title: "CA983 上海→洛杉矶",
+      subtitle: "T2 出发 · 建议提前 3 小时",
+      category: "航班信息 / 登机牌",
+      confidence: 0.88,
+      narrative: "登机牌信息清晰：国航 CA983，浦东 T2 出发。",
+      visible_clues: ["CA983", "PVG T2", "Seat 32A", "Gate H15"],
+      context: {
+        cultural: null,
+        historical: null,
+        practical: "国际航班建议提前 3 小时到场，登机口可能变更。",
+      },
+      flight_info: {
+        airline: "中国国际航空",
+        flight_number: "CA983",
+        passenger: "WANG/LEI",
+        booking_ref: "ABCDEF",
+        seat: "32A",
+        cabin: "Economy",
+        departure: {
+          airport: "PVG",
+          time: "13:20",
+          terminal: "T2",
+          gate: "H15",
+        },
+        arrival: {
+          airport: "LAX",
+          time: "10:05",
+          terminal: "TBIT",
+          gate: null,
+        },
+        status_notes: "登机口以机场屏幕为准，可能临时变更",
+        timeline_tips: [
+          "建议起飞前 3 小时到达机场",
+          "值机截止通常在起飞前 60–90 分钟",
+          "落地后注意海关与行李转盘信息",
+        ],
+      },
+      explore_chips: {
+        culinary: [],
+        nearby: ["登机口怎么走？", "建议提前多久到机场？", "延误了怎么办？"],
+      },
+      next_actions: ["核对登机口", "设置提醒"],
+      agent_id: "flight_info",
+      disclaimer: "航班动态以航司/机场官方为准，登机口可能随时变更。",
     };
   }
 

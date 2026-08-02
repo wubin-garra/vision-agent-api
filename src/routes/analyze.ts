@@ -495,6 +495,10 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
         { id: AgentId.FOOD_SCAN, name: "食识拍", icon: "scan" },
         { id: AgentId.PALM_READER, name: "看手相师", icon: "hand" },
         { id: AgentId.MENU_TRANSLATOR, name: "翻译师", icon: "languages" },
+        { id: AgentId.MED_LABEL, name: "药品说明", icon: "pill" },
+        { id: AgentId.SIGHT_ROUTE, name: "景点路线", icon: "route" },
+        { id: AgentId.HOTEL_GUIDE, name: "酒店入住", icon: "hotel" },
+        { id: AgentId.FLIGHT_INFO, name: "航班助手", icon: "plane" },
         { id: AgentId.GENERAL_CURIOSITY, name: "好奇心", icon: "sparkles" },
       ],
     };

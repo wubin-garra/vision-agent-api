@@ -10,6 +10,14 @@ export const AgentId = {
   PALM_READER: "palm_reader",
   TEXT_READER: "text_reader",
   MENU_TRANSLATOR: "menu_translator",
+  /** 出国旅游：药品说明书 / 药盒 */
+  MED_LABEL: "med_label",
+  /** 出国旅游：景点与一日路线 */
+  SIGHT_ROUTE: "sight_route",
+  /** 出国旅游：酒店入住凭证 / 门卡指引 */
+  HOTEL_GUIDE: "hotel_guide",
+  /** 出国旅游：机票 / 登机牌 / 航班信息 */
+  FLIGHT_INFO: "flight_info",
   GENERAL_CURIOSITY: "general_curiosity",
 } as const;
 
@@ -25,6 +33,10 @@ export const agentIdSchema = z.enum([
   "palm_reader",
   "text_reader",
   "menu_translator",
+  "med_label",
+  "sight_route",
+  "hotel_guide",
+  "flight_info",
   "general_curiosity",
 ]);
 
@@ -234,6 +246,72 @@ export const snackAnalysisSchema = z.object({
   serving_tip: z.string().nullish(),
 });
 
+/** 药品说明（med_label）— 非医疗诊断，仅解读包装可见信息 */
+export const medLabelReadingSchema = z.object({
+  drug_name: z.string().nullish(),
+  brand: z.string().nullish(),
+  active_ingredients: z.array(z.string()).default([]),
+  usage: z.string().nullish(),
+  dosage: z.string().nullish(),
+  warnings: z.array(z.string()).default([]),
+  storage: z.string().nullish(),
+  translated_summary: z.string().nullish(),
+  source_language: z.string().nullish(),
+});
+
+/** 景点路线（sight_route） */
+export const sightHighlightSchema = z.object({
+  name: z.string(),
+  tip: z.string().default(""),
+});
+
+export const sightRoutePlanSchema = z.object({
+  place_name: z.string().nullish(),
+  area: z.string().nullish(),
+  highlights: z.array(sightHighlightSchema).default([]),
+  suggested_route: z.array(z.string()).default([]),
+  duration_estimate: z.string().nullish(),
+  transport_tips: z.array(z.string()).default([]),
+  best_time: z.string().nullish(),
+  ticket_notes: z.string().nullish(),
+});
+
+/** 酒店入住（hotel_guide） */
+export const hotelGuideSchema = z.object({
+  hotel_name: z.string().nullish(),
+  confirmation_code: z.string().nullish(),
+  guest_name: z.string().nullish(),
+  check_in: z.string().nullish(),
+  check_out: z.string().nullish(),
+  address: z.string().nullish(),
+  room_type: z.string().nullish(),
+  steps: z.array(z.string()).default([]),
+  amenities_notes: z.array(z.string()).default([]),
+  wifi_or_access: z.string().nullish(),
+  contact: z.string().nullish(),
+});
+
+/** 航班 / 登机牌（flight_info） */
+export const flightLegSchema = z.object({
+  airport: z.string().nullish(),
+  time: z.string().nullish(),
+  terminal: z.string().nullish(),
+  gate: z.string().nullish(),
+});
+
+export const flightInfoSchema = z.object({
+  airline: z.string().nullish(),
+  flight_number: z.string().nullish(),
+  passenger: z.string().nullish(),
+  booking_ref: z.string().nullish(),
+  seat: z.string().nullish(),
+  cabin: z.string().nullish(),
+  departure: flightLegSchema.nullish(),
+  arrival: flightLegSchema.nullish(),
+  status_notes: z.string().nullish(),
+  timeline_tips: z.array(z.string()).default([]),
+});
+
 export const structuredInsightSchema = z.object({
   title: z.string(),
   category: z.string(),
@@ -260,6 +338,11 @@ export const structuredInsightSchema = z.object({
   menu_translation: menuTranslationSchema.nullish(),
   /** food_explorer（零食分析） */
   snack_analysis: snackAnalysisSchema.nullish(),
+  /** 出国旅游专项 */
+  med_label_reading: medLabelReadingSchema.nullish(),
+  sight_route: sightRoutePlanSchema.nullish(),
+  hotel_guide: hotelGuideSchema.nullish(),
+  flight_info: flightInfoSchema.nullish(),
 });
 
 export type StructuredInsight = z.infer<typeof structuredInsightSchema>;

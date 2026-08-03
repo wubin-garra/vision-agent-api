@@ -126,29 +126,32 @@ export const MENU_TRANSLATOR_INSIGHT_JSON_SCHEMA = `
 /** 药品说明（med_label） */
 export const MED_LABEL_INSIGHT_JSON_SCHEMA = `
 {
-  "title": "药品速读标题，如「布洛芬退烧止痛」",
+  "title": "药品速读标题，如「诺氟沙星胶囊抗生素」",
   "subtitle": "源语言 → 目标语言",
   "category": "药品说明 / 旅行药箱",
   "confidence": 0.0-1.0,
-  "narrative": "1-2句：包装语言、药名与用途概括（非诊疗）",
-  "visible_clues": ["包装上可见的药名", "剂量单位", "警示图标"],
+  "narrative": "1-2句：包装语言、药名、类别与用途概括（非诊疗）",
+  "visible_clues": ["包装上可见的药名", "规格/粒数", "适应症关键词", "警示文字"],
   "context": { "cultural": null, "historical": null, "practical": "旅行携带/服用提醒（非医嘱）" },
   "med_label_reading": {
     "drug_name": "通用名或商品名",
     "brand": "品牌或null",
     "active_ingredients": ["活性成分"],
-    "usage": "适应症/用途摘要",
-    "dosage": "用法用量（包装可见）",
-    "warnings": ["禁忌或警示"],
+    "usage": "适应症/功能主治摘要（包装可见）",
+    "dosage": "用法用量一句话总述（包装可见）",
+    "dosage_steps": ["成人用法…", "频次/疗程…", "儿童或其他人群…"],
+    "adverse_reactions": ["常见不良反应1", "常见不良反应2"],
+    "package_insert": "把说明书/药盒可见文字整理成 3–6 句可读要点（适应症、用法、注意、储存），禁止编造未见内容",
+    "warnings": ["禁忌", "孕妇/儿童/酒精等警示"],
     "storage": "储存条件或null",
     "translated_summary": "给旅客的简明中文摘要",
-    "source_language": "英文"
+    "source_language": "中文"
   },
-  "explore_chips": { "culinary": ["有哪些禁忌人群？", "和常用感冒药能一起吃吗？", "再译详细一点"], "nearby": [] },
-  "share_card": { "headline": "药品速读", "quote": "先看禁忌再服用", "cta": "继续解读" },
+  "explore_chips": { "culinary": ["用法用量是怎样的？", "有哪些不良反应？", "说明书里还有什么要注意？"], "nearby": [] },
+  "share_card": { "headline": "药品速读", "quote": "先看用法与禁忌再服用", "cta": "继续解读" },
   "style_vocabulary": [],
   "suggested_searches": [],
-  "next_actions": ["核对剂量", "查看禁忌"],
+  "next_actions": ["核对用法用量", "查看不良反应", "对照说明书原文"],
   "agent_id": "med_label",
   "disclaimer": "非医疗诊断或用药建议，请遵医嘱与说明书原文。"
 }
@@ -510,11 +513,15 @@ ${MENU_TRANSLATOR_INSIGHT_JSON_SCHEMA}
 ${MED_LABEL_INSIGHT_JSON_SCHEMA}
 
 规则：
-1. **必须输出 med_label_reading**；看不清的字段用 null/空数组，禁止编造成分或剂量
-2. translated_summary 用用户 locale 写简明摘要；强调非医疗诊断
-3. warnings 优先提取禁忌、孕妇、儿童、酒精等警示
-4. disclaimer 必须提醒遵医嘱与说明书原文
-5. explore_chips.culinary 放 2–3 个用药向追问（命名沿用字段，内容与药品相关即可）
+1. **必须输出 med_label_reading**；看不清的字段用 null/空数组，禁止编造成分、剂量或不良反应
+2. **优先从包装/说明书可见文字提取这三项**（这是用户最关心的）：
+   - dosage + dosage_steps：用法用量（成人/儿童、每次剂量、每日次数、疗程；写得具体）
+   - adverse_reactions：不良反应（恶心、皮疹等包装提及的条目；未见则空数组，勿凭常识编造）
+   - package_insert：说明书要点（把可见段落整理成 3–6 句连贯摘要，覆盖适应症、用法、注意、储存）
+3. usage 写适应症/功能主治；warnings 写禁忌与特殊人群警示（孕妇、儿童、酒精、过敏等）
+4. translated_summary 用用户 locale 写简明摘要；强调非医疗诊断
+5. disclaimer 必须提醒遵医嘱与说明书原文
+6. explore_chips.culinary 放 2–3 个用药向追问（用法用量 / 不良反应 / 说明书注意点）
 
 使用用户 locale 对应的语言。
 `,
@@ -764,9 +771,9 @@ export const FOLLOWUP_CHIPS: Record<AgentId, string[]> = {
     "把整页再译详细一点",
   ],
   [AgentId.MED_LABEL]: [
-    "有哪些禁忌人群？",
-    "用法用量再说明一下",
-    "旅行携带需要注意什么？",
+    "用法用量是怎样的？",
+    "有哪些不良反应？",
+    "说明书里还有什么要注意？",
   ],
   [AgentId.SIGHT_ROUTE]: [
     "附近还有什么值得去？",

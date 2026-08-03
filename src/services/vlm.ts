@@ -60,7 +60,7 @@ function buildVisionAnalyzeUserText(input: {
       : "";
   const medHint =
     input.agentId === "med_label"
-      ? "\n\n这是药品说明：必须输出 med_label_reading；看不清的剂量/成分用 null，禁止编造医嘱。"
+      ? "\n\n这是药品说明：必须输出 med_label_reading；务必从包装可见文字尽量提取 usage（适应症）、dosage/dosage_steps（用法用量）、adverse_reactions（不良反应）、package_insert（说明书要点）、warnings（禁忌）；看不清用 null/空数组，禁止编造医嘱。"
       : "";
   const sightHint =
     input.agentId === "sight_route"
@@ -805,16 +805,24 @@ export class VlmService {
         active_ingredients: ["布洛芬 200mg"],
         usage: "用于缓解轻中度疼痛与发热（包装所示）",
         dosage: "成人每 4–6 小时 1 片，24 小时不超过包装上限",
+        dosage_steps: [
+          "成人：每次 1 片（200mg）",
+          "每隔 4–6 小时可重复，24 小时不超过包装标注上限",
+          "儿童用量需遵包装或医师指导",
+        ],
+        adverse_reactions: ["偶见胃部不适", "皮疹等过敏反应（包装警示）"],
+        package_insert:
+          "本品为非处方止痛退烧药。按包装用法服用，勿与其他含布洛芬产品叠服。胃溃疡、孕妇等特殊人群慎用。室温干燥保存，并置于儿童不能接触处。具体以说明书原文为准。",
         warnings: ["胃溃疡者慎用", "勿与其他含布洛芬产品叠服", "儿童用量需遵包装"],
         storage: "室温干燥处保存",
-        translated_summary: "非处方止痛退烧药；先核对禁忌与剂量，不确定请问药师。",
+        translated_summary: "非处方止痛退烧药；先核对用法用量、不良反应与禁忌，不确定请问药师。",
         source_language: "英文",
       },
       explore_chips: {
-        culinary: ["有哪些禁忌人群？", "用法用量再说明一下", "旅行携带需要注意什么？"],
+        culinary: ["用法用量是怎样的？", "有哪些不良反应？", "说明书里还有什么要注意？"],
         nearby: [],
       },
-      next_actions: ["核对剂量", "查看禁忌"],
+      next_actions: ["核对用法用量", "查看不良反应", "对照说明书原文"],
       agent_id: "med_label",
       disclaimer: "非医疗诊断或用药建议，请遵医嘱与说明书原文。",
     };

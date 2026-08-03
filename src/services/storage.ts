@@ -61,7 +61,7 @@ export class StorageService {
       .toBuffer();
   }
 
-  private async makeThumbnail(data: Buffer, size = 256): Promise<Buffer> {
+  private async makeThumbnail(data: Buffer, size = 720): Promise<Buffer> {
     return sharp(data)
       .resize({
         width: size,
@@ -69,7 +69,7 @@ export class StorageService {
         fit: "inside",
         withoutEnlargement: true,
       })
-      .jpeg({ quality: 75, mozjpeg: true })
+      .jpeg({ quality: 85, mozjpeg: true })
       .toBuffer();
   }
 }

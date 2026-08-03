@@ -256,13 +256,21 @@ export const snackAnalysisSchema = z.object({
   serving_tip: z.string().nullish(),
 });
 
-/** 药品说明（med_label）— 非医疗诊断，仅解读包装可见信息 */
+/** 药品说明（med_label）— 非医疗诊断，仅解读包装/说明书可见信息 */
 export const medLabelReadingSchema = z.object({
   drug_name: z.string().nullish(),
   brand: z.string().nullish(),
   active_ingredients: stringArrayField,
+  /** 适应症 / 功能主治（包装可见） */
   usage: z.string().nullish(),
+  /** 用法用量摘要（一句话或分段） */
   dosage: z.string().nullish(),
+  /** 用法用量分点（成人/儿童/频次等，看不清则空数组） */
+  dosage_steps: stringArrayField,
+  /** 不良反应（包装/说明书可见条目） */
+  adverse_reactions: stringArrayField,
+  /** 说明书要点：把可见说明书内容整理成 3–6 句可读摘要，禁止编造未见文字 */
+  package_insert: z.string().nullish(),
   warnings: stringArrayField,
   storage: z.string().nullish(),
   translated_summary: z.string().nullish(),

@@ -2,7 +2,7 @@ import { AgentId } from "../schemas/insight.js";
 
 /**
  * 相机「自动」模式可路由到的专项 Agent（与 mobile cameraModes 菜单对齐）。
- * 已下线入口（art_critic / design_critic / text_reader）不在此列。
+ * 已下线入口（art_critic / text_reader）不在此列。
  */
 export const AUTO_ROUTE_AGENTS = [
   AgentId.FLIGHT_INFO,
@@ -22,11 +22,11 @@ export type AutoRouteAgentId = (typeof AUTO_ROUTE_AGENTS)[number];
 
 const AUTO_ROUTE_SET = new Set<string>(AUTO_ROUTE_AGENTS);
 
-/** 历史/下线 Agent → 当前可用专项 */
-const OFFLINE_AGENT_REMAP: Partial<Record<AgentId, AgentId>> = {
-  [AgentId.ART_CRITIC]: AgentId.GENERAL_CURIOSITY,
-  [AgentId.DESIGN_CRITIC]: AgentId.GENERAL_CURIOSITY,
-  [AgentId.TEXT_READER]: AgentId.GENERAL_CURIOSITY,
+/** 历史/下线/已删 Agent → 当前可用专项 */
+const OFFLINE_AGENT_REMAP: Record<string, AgentId> = {
+  art_critic: AgentId.GENERAL_CURIOSITY,
+  design_critic: AgentId.GENERAL_CURIOSITY,
+  text_reader: AgentId.GENERAL_CURIOSITY,
 };
 
 type CaptionRule = {
@@ -102,8 +102,8 @@ export function resolveAutoRouteAgent(
   recommended: AgentId | string | null | undefined,
   caption?: string | null,
 ): AgentId {
-  const raw = (recommended ?? AgentId.GENERAL_CURIOSITY) as AgentId;
-  const remapped = OFFLINE_AGENT_REMAP[raw] ?? raw;
+  const raw = String(recommended ?? AgentId.GENERAL_CURIOSITY);
+  const remapped = OFFLINE_AGENT_REMAP[raw] ?? (raw as AgentId);
   const base = isAutoRouteAgent(remapped)
     ? remapped
     : AgentId.GENERAL_CURIOSITY;

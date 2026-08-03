@@ -404,13 +404,6 @@ style_vocabulary 可包含建筑风格术语。
 侧重：绘画、雕塑、街头艺术的流派、风格、象征意义。
 context.cultural 侧重艺术运动与审美语境。
 `,
-  [AgentId.DESIGN_CRITIC]:
-    BASE_SYSTEM +
-    `
-角色：设计评论家 (design_critic)
-侧重：家具、工业产品、室内设计的年代、材质、设计词汇。
-style_vocabulary 必须包含具体设计术语。
-`,
   [AgentId.STYLIST]:
     BASE_SYSTEM +
     `
@@ -581,7 +574,7 @@ ${FLIGHT_INFO_INSIGHT_JSON_SCHEMA}
 };
 
 export const ROUTER_SYSTEM = `你是视觉场景分类器。根据图片描述，从【当前可用智能体】中选一个做专项分析。
-原则：能匹配专项就选专项；只有确实无法归类时才用 general_curiosity。禁止推荐已下线的 art_critic、design_critic、text_reader。
+原则：能匹配专项就选专项；只有确实无法归类时才用 general_curiosity。禁止推荐已下线的 art_critic、text_reader，以及已删除的 design_critic。
 
 输出合法 JSON：
 {
@@ -772,7 +765,6 @@ export const SCENE_TO_AGENT: Record<string, AgentId> = {
 export const FOLLOWUP_CHIPS: Record<AgentId, string[]> = {
   [AgentId.LOCAL_GUIDE]: ["更多历史背景", "附近有什么值得看的", "最佳参观时间"],
   [AgentId.ART_CRITIC]: ["艺术家可能受谁影响", "这个符号代表什么", "类似风格有哪些"],
-  [AgentId.DESIGN_CRITIC]: ["属于哪个设计时期", "类似设计作品", "材质和工艺"],
   [AgentId.STYLIST]: ["这是什么风格", "适合什么场合", "搭配建议"],
   [AgentId.FOOD_EXPLORER]: [
     "配料表里有什么需要注意的？",

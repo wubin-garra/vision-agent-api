@@ -335,7 +335,7 @@ export class VlmService {
       `图片视觉描述：\n${caption}\n\n` +
       "请根据描述选择最合适的【当前可用】专项智能体。" +
       "优先 flight_info / hotel_guide / med_label / menu_translator / food_scan / food_explorer / palm_reader / stylist / sight_route / local_guide；" +
-      "无法匹配再用 general_curiosity。不要选 art_critic、design_critic、text_reader。" +
+      "无法匹配再用 general_curiosity。不要选 art_critic、text_reader、design_critic。" +
       "只输出 JSON。";
 
     return this.chatJson({
@@ -984,7 +984,7 @@ export class VlmService {
           "1920s geometric lamp",
         ],
         next_actions: ["查看相似设计史", "生成分享卡片"],
-        agent_id: "design_critic",
+        agent_id: "general_curiosity",
         disclaimer: "非鉴定/医疗/法律建议，仅供参考。",
       };
     }
@@ -1002,7 +1002,7 @@ export class VlmService {
       style_vocabulary: ["Art Deco", "Geometric", "Streamline Moderne"],
       suggested_searches: ["Art Deco table lamp brass"],
       next_actions: ["Explore design history", "Create share card"],
-      agent_id: "design_critic",
+      agent_id: "general_curiosity",
       disclaimer: "Not appraisal, medical, or legal advice.",
     };
   }

@@ -13,7 +13,6 @@ const stringArrayField = arrayField(z.string());
 export const AgentId = {
   LOCAL_GUIDE: "local_guide",
   ART_CRITIC: "art_critic",
-  DESIGN_CRITIC: "design_critic",
   STYLIST: "stylist",
   FOOD_EXPLORER: "food_explorer",
   FOOD_SCAN: "food_scan",
@@ -33,22 +32,34 @@ export const AgentId = {
 
 export type AgentId = (typeof AgentId)[keyof typeof AgentId];
 
-export const agentIdSchema = z.enum([
-  "local_guide",
-  "art_critic",
-  "design_critic",
-  "stylist",
-  "food_explorer",
-  "food_scan",
-  "palm_reader",
-  "text_reader",
-  "menu_translator",
-  "med_label",
-  "sight_route",
-  "hotel_guide",
-  "flight_info",
-  "general_curiosity",
-]);
+/** 已删除的 Agent：读旧记忆 / 模型误返回时映射到可用 id */
+const LEGACY_AGENT_REMAP: Record<string, AgentId> = {
+  design_critic: AgentId.GENERAL_CURIOSITY,
+};
+
+export const agentIdSchema = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && LEGACY_AGENT_REMAP[value]) {
+      return LEGACY_AGENT_REMAP[value];
+    }
+    return value;
+  },
+  z.enum([
+    "local_guide",
+    "art_critic",
+    "stylist",
+    "food_explorer",
+    "food_scan",
+    "palm_reader",
+    "text_reader",
+    "menu_translator",
+    "med_label",
+    "sight_route",
+    "hotel_guide",
+    "flight_info",
+    "general_curiosity",
+  ]),
+);
 
 export const SceneType = {
   LANDMARK_STREET: "landmark_street",

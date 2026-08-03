@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+/**
+ * LLM 对「看不清」字段常返回 null；Zod `.default([])` 只覆盖 undefined。
+ * 统一把 null/undefined 收成空数组，避免洞察结构校验失败。
+ */
+function arrayField<T extends z.ZodTypeAny>(item: T) {
+  return z.preprocess((v) => (v == null ? [] : v), z.array(item));
+}
+
+const stringArrayField = arrayField(z.string());
+
 export const AgentId = {
   LOCAL_GUIDE: "local_guide",
   ART_CRITIC: "art_critic",
@@ -80,8 +90,8 @@ export const nearbyPickSchema = z.object({
 });
 
 export const exploreChipsSchema = z.object({
-  culinary: z.array(z.string()).default([]),
-  nearby: z.array(z.string()).default([]),
+  culinary: stringArrayField,
+  nearby: stringArrayField,
 });
 
 export const shareCardSchema = z.object({
@@ -207,9 +217,9 @@ export const palmReadingSchema = z.object({
   zodiac: z.string().nullish(),
   insight_quote: z.string().nullish(),
   /** Chance 顶部摘要卡，建议 3 条：手型、核心纹路、独特标记 */
-  summary_traits: z.array(palmSummaryTraitSchema).default([]),
-  palm_lines: z.array(palmLineSchema).default([]),
-  personality_spectrum: z.array(personalitySliderSchema).default([]),
+  summary_traits: arrayField(palmSummaryTraitSchema),
+  palm_lines: arrayField(palmLineSchema),
+  personality_spectrum: arrayField(personalitySliderSchema),
   compatibility_teaser: z.string().nullish(),
 });
 
@@ -219,15 +229,15 @@ export const menuDishSchema = z.object({
   translation: z.string(),
   price: z.string().nullish(),
   notes: z.string().nullish(),
-  tags: z.array(z.string()).default([]),
+  tags: stringArrayField,
 });
 
 /** 翻译师整页结果；旧 memory 无此字段时为 null，前端回退通用 UI */
 export const menuTranslationSchema = z.object({
   source_language: z.string().default(""),
   target_language: z.string().default(""),
-  dishes: z.array(menuDishSchema).default([]),
-  ordering_tips: z.array(z.string()).default([]),
+  dishes: arrayField(menuDishSchema),
+  ordering_tips: stringArrayField,
   dietary_summary: z.string().nullish(),
 });
 
@@ -239,9 +249,9 @@ export const snackAnalysisSchema = z.object({
   brand: z.string().nullish(),
   product_name: z.string().nullish(),
   snack_type: z.string().default(""),
-  taste_tags: z.array(z.string()).default([]),
-  ingredients_highlight: z.array(z.string()).default([]),
-  caution_notes: z.array(z.string()).default([]),
+  taste_tags: stringArrayField,
+  ingredients_highlight: stringArrayField,
+  caution_notes: stringArrayField,
   calories_estimate: z.string().nullish(),
   serving_tip: z.string().nullish(),
 });
@@ -250,10 +260,10 @@ export const snackAnalysisSchema = z.object({
 export const medLabelReadingSchema = z.object({
   drug_name: z.string().nullish(),
   brand: z.string().nullish(),
-  active_ingredients: z.array(z.string()).default([]),
+  active_ingredients: stringArrayField,
   usage: z.string().nullish(),
   dosage: z.string().nullish(),
-  warnings: z.array(z.string()).default([]),
+  warnings: stringArrayField,
   storage: z.string().nullish(),
   translated_summary: z.string().nullish(),
   source_language: z.string().nullish(),
@@ -268,10 +278,10 @@ export const sightHighlightSchema = z.object({
 export const sightRoutePlanSchema = z.object({
   place_name: z.string().nullish(),
   area: z.string().nullish(),
-  highlights: z.array(sightHighlightSchema).default([]),
-  suggested_route: z.array(z.string()).default([]),
+  highlights: arrayField(sightHighlightSchema),
+  suggested_route: stringArrayField,
   duration_estimate: z.string().nullish(),
-  transport_tips: z.array(z.string()).default([]),
+  transport_tips: stringArrayField,
   best_time: z.string().nullish(),
   ticket_notes: z.string().nullish(),
 });
@@ -285,8 +295,8 @@ export const hotelGuideSchema = z.object({
   check_out: z.string().nullish(),
   address: z.string().nullish(),
   room_type: z.string().nullish(),
-  steps: z.array(z.string()).default([]),
-  amenities_notes: z.array(z.string()).default([]),
+  steps: stringArrayField,
+  amenities_notes: stringArrayField,
   wifi_or_access: z.string().nullish(),
   contact: z.string().nullish(),
 });
@@ -309,29 +319,29 @@ export const flightInfoSchema = z.object({
   departure: flightLegSchema.nullish(),
   arrival: flightLegSchema.nullish(),
   status_notes: z.string().nullish(),
-  timeline_tips: z.array(z.string()).default([]),
+  timeline_tips: stringArrayField,
 });
 
 export const structuredInsightSchema = z.object({
   title: z.string(),
   category: z.string(),
   confidence: z.number().min(0).max(1).default(0.5),
-  visible_clues: z.array(z.string()).default([]),
+  visible_clues: stringArrayField,
   context: insightContextSchema.default({}),
-  style_vocabulary: z.array(z.string()).default([]),
-  suggested_searches: z.array(z.string()).default([]),
-  next_actions: z.array(z.string()).default([]),
+  style_vocabulary: stringArrayField,
+  suggested_searches: stringArrayField,
+  next_actions: stringArrayField,
   agent_id: agentIdSchema.default("general_curiosity"),
   disclaimer: z.string().default("非鉴定/医疗/法律建议，仅供参考。"),
   subtitle: z.string().nullish(),
   narrative: z.string().nullish(),
-  flavor_notes: z.array(flavorNoteSchema).default([]),
-  nearby_picks: z.array(nearbyPickSchema).default([]),
+  flavor_notes: arrayField(flavorNoteSchema),
+  nearby_picks: arrayField(nearbyPickSchema),
   explore_chips: exploreChipsSchema.default({ culinary: [], nearby: [] }),
   share_card: shareCardSchema.nullish(),
   nutrition: nutritionProfileSchema.nullish(),
-  allergens: z.array(allergenItemSchema).default([]),
-  nutrition_tips: z.array(nutritionTipSchema).default([]),
+  allergens: arrayField(allergenItemSchema),
+  nutrition_tips: arrayField(nutritionTipSchema),
   diet_summary: z.string().nullish(),
   palm_reading: palmReadingSchema.nullish(),
   /** menu_translator */

@@ -12,7 +12,11 @@
 | 洞察页一进就崩 | 是否**顶层** `import expo-speech-recognition`（Expo Go 会炸，要懒加载） |
 | 没有麦克风按钮 | Expo Go 故意隐藏；要语音用 `expo run:android` |
 | 键盘挡住输入 | 输入栏固定底部；Android `softwareKeyboardLayoutMode: resize` |
-| 食识拍字段不全 | 是否传了 `agent_override=food_scan`；专项走完整链路 |
+| 食识拍字段不全 | 是否传了 `agent_override=food_scan`；专项走完整链路；前端是否渲染了 `visible_clues` / tips 等 |
+| 药品无用法/功效 | 是否强制看图（`med_label`）；线上 API 是否已部署；schema 数组 `null` 是否已 coerce |
+| 日记/细看没默认图 | 是否走 `diaryDemos.ts` 合并；别改 `homeDemos` 旅行示例 |
+| 列表预览发糊 | 是否误用小 `thumbnail_url`；大卡应用 `image_url` |
+| 本地改了线上没变 | `.env` 是否指向 onrender；改 URL 后是否 Reload |
 | 积分刷新没了 | 预期：还未持久化 / 未接 API |
 | Gradle / Hermes 下载失败 | 用国内 Maven 镜像；Windows 注意路径过长（短 `GRADLE_USER_HOME`） |
 | `git push` 卡在 github.com:443 | 浏览器能开、Git 不通时，多为未走本机代理；试 `$env:HTTPS_PROXY="http://127.0.0.1:10808"` 再 push |
@@ -44,4 +48,5 @@
 - 产品：[../vision-agent-mobile/docs/vision-agent-产品文档.md](../../vision-agent-mobile/docs/vision-agent-产品文档.md)  
 - 埋点：[../../vision-agent-mobile/docs/埋点.md](../../vision-agent-mobile/docs/埋点.md)  
 - 食识拍：[../../vision-agent-mobile/docs/food-scan.md](../../vision-agent-mobile/docs/food-scan.md)  
+- 近期改动与避坑：[../../vision-agent-mobile/docs/近期改动与避坑-2026-08.md](../../vision-agent-mobile/docs/近期改动与避坑-2026-08.md)  
 - 积分：[../../vision-agent-mobile/docs/todo.md](../../vision-agent-mobile/docs/todo.md)

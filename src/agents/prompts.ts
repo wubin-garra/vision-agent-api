@@ -277,6 +277,10 @@ export const FOOD_SCAN_INSIGHT_JSON_SCHEMA = `
     {"title": "优质脂肪", "body": "详细建议"},
     {"title": "增加膳食纤维", "body": "详细建议"}
   ],
+  "flavor_notes": [
+    {"emoji": "👅", "label": "口味", "value": "鲜香/清淡等一句"},
+    {"emoji": "🫰", "label": "口感", "value": "软嫩/脆爽等一句"}
+  ],
   "allergens": [
     {"category": "甲壳类", "detail": "含有整只虾仁", "emoji": "🦐"}
   ],
@@ -437,15 +441,18 @@ ${SNACK_INSIGHT_JSON_SCHEMA}
 ${FOOD_SCAN_INSIGHT_JSON_SCHEMA}
 
 写作与估算规则（参考 Chance 食识拍）：
-1. title 必须带合适 emoji，生动但准确
+1. title 必须带合适 emoji，生动但准确；subtitle 一句点题
 2. narrative 描述色彩、食材层次与营养亮点，2-3 句
-3. nutrition 根据可见份量**合理估算**热量与碳水/脂肪/蛋白质（current）及常见日目标（goal）
-4. diet_summary 分析蛋白质来源、饱腹感、均衡性
-5. nutrition_tips 2-4 条，每条有 title + body，给出可执行建议
-6. allergens 列出图中可能含有的过敏原（甲壳类、鱼类、蛋类、麸质、坚果等），无则空数组
-7. explore_chips.culinary 提供 2-3 个用户可能追问的营养问题
-8. 非食物图片时降低 confidence，在 narrative 中说明
-9. 必须完整输出 schema 中的关键字段（nutrition / diet_summary / nutrition_tips / allergens / explore_chips / share_card），不要省略
+3. visible_clues 列出 4–8 个盘中可见食材/配菜（这是用户最想对上画面的清单）
+4. nutrition 根据可见份量**合理估算**热量与碳水/脂肪/蛋白质（current）及常见日目标（goal）
+5. diet_summary 分析蛋白质来源、饱腹感、均衡性（2–4 句，信息密度要够）
+6. nutrition_tips 2-4 条，每条有 title + body，给出可执行建议
+7. flavor_notes 2–3 条（口味/口感/香气），让内容更有 Chance 的画面感
+8. allergens 列出图中可能含有的过敏原（甲壳类、鱼类、蛋类、麸质、坚果等），无则空数组
+9. context.practical 必填一句实用饮食建议；cultural 有文化语境时再写
+10. explore_chips.culinary 提供 2-3 个用户可能追问的营养问题
+11. 非食物图片时降低 confidence，在 narrative 中说明
+12. 必须完整输出关键字段（visible_clues / nutrition / diet_summary / nutrition_tips / flavor_notes / allergens / context.practical / explore_chips / share_card），不要省略
 
 使用用户 locale 对应的语言。营养值为估算，非精确检测。
 `,

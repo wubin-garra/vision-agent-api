@@ -152,7 +152,7 @@ function timedLog(label: string, started: number): void {
 
 /**
  * 有 override（专项镜头）：完整 caption → DeepSeek 完整 JSON（质量优先）
- * 无 override（自动）：fast caption → router → vision oneshot（速度优先）
+ * 无 override（自动）：fast caption → router（仅菜单可用 Agent）→ vision oneshot（速度优先）
  */
 async function runAnalyzePipeline(input: {
   imageBytes: Buffer;

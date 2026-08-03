@@ -1,3 +1,4 @@
+import { resolveAutoRouteAgent } from "./autoRoute.js";
 import { AGENT_PROMPTS, SCENE_TO_AGENT } from "./prompts.js";
 import { sanitizeMedLabelInsight } from "./medSanitize.js";
 import { sanitizePalmInsight } from "./palmSanitize.js";
@@ -49,12 +50,19 @@ export class SceneRouter {
       reasoning: raw.reasoning ?? "",
     });
 
-    if (parsed.success) {
-      return parsed.data.recommended_agent;
-    }
+    const recommended = parsed.success
+      ? parsed.data.recommended_agent
+      : (SCENE_TO_AGENT[String(raw.scene_type ?? "general")] ??
+        AgentId.GENERAL_CURIOSITY);
 
-    const scene = String(raw.scene_type ?? "general");
-    return SCENE_TO_AGENT[scene] ?? AgentId.GENERAL_CURIOSITY;
+    const resolved = resolveAutoRouteAgent(recommended, input.imageCaption);
+    if (resolved !== recommended) {
+      console.log(
+        `[analyze] auto-route remap ${recommended} → ${resolved}` +
+          (raw.reasoning ? ` (${String(raw.reasoning)})` : ""),
+      );
+    }
+    return resolved;
   }
 }
 

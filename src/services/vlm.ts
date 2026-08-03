@@ -332,7 +332,11 @@ export class VlmService {
       input.imageCaption ??
       (await this.caption(input.imageB64, "zh-CN", undefined, "fast"));
     const userText =
-      `图片视觉描述：\n${caption}\n\n` + "请根据描述分类场景。只输出 JSON。";
+      `图片视觉描述：\n${caption}\n\n` +
+      "请根据描述选择最合适的【当前可用】专项智能体。" +
+      "优先 flight_info / hotel_guide / med_label / menu_translator / food_scan / food_explorer / palm_reader / stylist / sight_route / local_guide；" +
+      "无法匹配再用 general_curiosity。不要选 art_critic、design_critic、text_reader。" +
+      "只输出 JSON。";
 
     return this.chatJson({
       model: settings.routerModel,

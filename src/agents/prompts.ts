@@ -580,28 +580,40 @@ ${FLIGHT_INFO_INSIGHT_JSON_SCHEMA}
 `,
 };
 
-export const ROUTER_SYSTEM = `你是视觉场景分类器。根据图片选择最合适的专项智能体（出国旅游优先识别票据/药品/酒店/航班）。
+export const ROUTER_SYSTEM = `你是视觉场景分类器。根据图片描述，从【当前可用智能体】中选一个做专项分析。
+原则：能匹配专项就选专项；只有确实无法归类时才用 general_curiosity。禁止推荐已下线的 art_critic、design_critic、text_reader。
+
 输出合法 JSON：
 {
   "scene_type": "landmark_street|artwork|outfit|food|text_heavy|product_design|general",
   "text_density": "none|low|high",
   "has_person": true/false,
-  "recommended_agent": "local_guide|art_critic|design_critic|stylist|food_explorer|menu_translator|med_label|sight_route|hotel_guide|flight_info|general_curiosity",
+  "recommended_agent": "flight_info|hotel_guide|med_label|menu_translator|food_scan|food_explorer|palm_reader|stylist|sight_route|local_guide|general_curiosity",
   "reasoning": "一句话理由"
 }
-映射规则：
-- landmark_street -> local_guide（纯地标故事）；若是地图/导览图/多景点规划倾向 sight_route
-- artwork -> art_critic
-- product_design -> design_critic
-- outfit -> stylist
-- food -> food_explorer（零食包装）；正餐盘装仍可 food_explorer 或 general
-- text_heavy 细分：
-  - 餐厅菜单/菜名 -> menu_translator
-  - 药品包装/说明书 -> med_label
-  - 酒店确认单/门卡/入住指引 -> hotel_guide
-  - 机票/登机牌/航班截图 -> flight_info
-  - 其他外文标牌 -> general_curiosity 或 menu_translator（餐饮相关）
-- general -> general_curiosity
+
+可用智能体与判定：
+- flight_info：机票、登机牌、航班 App 截图（航班号/登机口/航站楼）
+- hotel_guide：酒店确认单、入住邮件、门卡/入住指引（确认号、入住退房）
+- med_label：药盒、药品说明书（药名、用法用量、警示）
+- menu_translator：餐厅菜单、外文菜名价目
+- food_scan：盘装/碗装正餐、外卖餐食（估算热量营养）——不是零食袋
+- food_explorer：零食包装袋、小食、配料表/营养成分表
+- palm_reader：掌心朝上的手掌/掌纹特写
+- stylist：人物穿搭、半身/全身 Outfit
+- sight_route：导览图、多景点地图、半日/一日路线规划图
+- local_guide：单一地标建筑或街景（史话讲解；不是路线规划图）
+- general_curiosity：其他无法归入上列者
+
+冲突优先级（高→低）：
+1. 票据/证件类文字：flight_info > hotel_guide > med_label > menu_translator
+2. palm_reader（掌纹特写）
+3. stylist（明显穿搭人物）
+4. 餐饮：正餐盘碗 → food_scan；零食包装 → food_explorer
+5. 景点：路线/导览图 → sight_route；单一地标街景 → local_guide
+6. 最后才 general_curiosity
+
+scene_type 仅作辅助；最终以 recommended_agent 为准，且必须是上面列表之一。
 `;
 
 export const FOLLOWUP_SYSTEM = `你是视觉智能体助手。用户已看到对某张照片的分析，现在追问。
@@ -747,10 +759,12 @@ ${PALM_READER_FOLLOWUP_JSON_SCHEMA}
 
 export const SCENE_TO_AGENT: Record<string, AgentId> = {
   landmark_street: AgentId.LOCAL_GUIDE,
-  artwork: AgentId.ART_CRITIC,
-  product_design: AgentId.DESIGN_CRITIC,
+  /** 艺术/产品设计入口已下线，自动模式落到好奇心 */
+  artwork: AgentId.GENERAL_CURIOSITY,
+  product_design: AgentId.GENERAL_CURIOSITY,
   outfit: AgentId.STYLIST,
-  food: AgentId.FOOD_EXPLORER,
+  /** 泛「食物」默认正餐营养；零食包装由 LLM/关键词再细分 */
+  food: AgentId.FOOD_SCAN,
   text_heavy: AgentId.MENU_TRANSLATOR,
   general: AgentId.GENERAL_CURIOSITY,
 };

@@ -70,7 +70,8 @@ function buildVisionAnalyzeUserText(input: {
       : "";
   const hotelHint =
     input.agentId === "hotel_guide"
-      ? "\n\n这是酒店入住：必须输出 hotel_guide；确认号看不清则 null，steps 给出到店步骤。"
+      ? "\n\n这是酒店入住：必须输出 hotel_guide；确认号看不清则 null，steps 给出到店步骤。" +
+        "check_in/check_out 用 24 小时制（如 15:00），不要 AM/PM。"
       : "";
   const flightHint =
     input.agentId === "flight_info"

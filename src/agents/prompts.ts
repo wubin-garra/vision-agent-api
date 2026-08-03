@@ -201,8 +201,8 @@ export const HOTEL_GUIDE_INSIGHT_JSON_SCHEMA = `
     "hotel_name": "酒店名",
     "confirmation_code": "确认号或null",
     "guest_name": "住客名或null",
-    "check_in": "入住时间",
-    "check_out": "退房时间",
+    "check_in": "15:00",
+    "check_out": "11:00",
     "address": "地址",
     "room_type": "房型或null",
     "steps": ["到达后先…", "再…"],
@@ -553,7 +553,9 @@ ${HOTEL_GUIDE_INSIGHT_JSON_SCHEMA}
 规则：
 1. **必须输出 hotel_guide**；steps 给到店后可执行步骤（2–5 步）
 2. 禁止编造确认号/姓名；看不清写 null
-3. explore_chips.nearby 放入住沟通/交通向追问
+3. check_in / check_out 优先 24 小时制（如「15:00」「11:00」），不要写 AM/PM
+4. subtitle 宜短，如「确认号 · 入住 15:00」；勿用冗长 12 小时制重复两遍时间
+5. explore_chips.nearby 放入住沟通/交通向追问
 
 使用用户 locale 对应的语言。
 `,

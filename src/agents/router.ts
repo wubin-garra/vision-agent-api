@@ -1,4 +1,5 @@
 import { AGENT_PROMPTS, SCENE_TO_AGENT } from "./prompts.js";
+import { sanitizeMedLabelInsight } from "./medSanitize.js";
 import { sanitizePalmInsight } from "./palmSanitize.js";
 import {
   AgentId,
@@ -98,6 +99,9 @@ export class InsightPlanner {
     // 几何 path 在 pipeline 层注入；此处只做文案兜底
     if (input.agentId === AgentId.PALM_READER) {
       return sanitizePalmInsight(parsed.data);
+    }
+    if (input.agentId === AgentId.MED_LABEL) {
+      return sanitizeMedLabelInsight(parsed.data);
     }
     return parsed.data;
   }

@@ -137,11 +137,11 @@ export const MED_LABEL_INSIGHT_JSON_SCHEMA = `
     "drug_name": "通用名或商品名",
     "brand": "品牌或null",
     "active_ingredients": ["活性成分"],
-    "usage": "适应症/功能主治摘要（包装可见）",
-    "dosage": "用法用量一句话总述（包装可见）",
+    "usage": "功效/适应症/功能主治（必填，包装可见文字）",
+    "dosage": "用法用量一句话总述（必填）",
     "dosage_steps": ["成人用法…", "频次/疗程…", "儿童或其他人群…"],
     "adverse_reactions": ["常见不良反应1", "常见不良反应2"],
-    "package_insert": "把说明书/药盒可见文字整理成 3–6 句可读要点（适应症、用法、注意、储存），禁止编造未见内容",
+    "package_insert": "说明书要点 3–6 句：必须含功效、用法用量、注意、储存；禁止编造未见内容",
     "warnings": ["禁忌", "孕妇/儿童/酒精等警示"],
     "storage": "储存条件或null",
     "translated_summary": "给旅客的简明中文摘要",
@@ -513,12 +513,14 @@ ${MENU_TRANSLATOR_INSIGHT_JSON_SCHEMA}
 ${MED_LABEL_INSIGHT_JSON_SCHEMA}
 
 规则：
-1. **必须输出 med_label_reading**；看不清的字段用 null/空数组，禁止编造成分、剂量或不良反应
-2. **优先从包装/说明书可见文字提取这三项**（这是用户最关心的）：
-   - dosage + dosage_steps：用法用量（成人/儿童、每次剂量、每日次数、疗程；写得具体）
-   - adverse_reactions：不良反应（恶心、皮疹等包装提及的条目；未见则空数组，勿凭常识编造）
-   - package_insert：说明书要点（把可见段落整理成 3–6 句连贯摘要，覆盖适应症、用法、注意、储存）
-3. usage 写适应症/功能主治；warnings 写禁忌与特殊人群警示（孕妇、儿童、酒精、过敏等）
+1. **必须输出 med_label_reading**，并尽量填满关键字段。只根据图中可见文字整理，允许同义改写与分点归纳；确实看不清再写「图中未清晰显示…」，禁止凭常识编造具体剂量数字。
+2. **以下字段为用户必看，能辨认就必须写，不要留空/null**：
+   - usage：功效/适应症/功能主治（药盒正面或说明书常见小字，如「用于…感染」）
+   - dosage + dosage_steps：用法用量（口服/外用、每次量、每日次数、疗程、成人/儿童）
+   - adverse_reactions：不良反应（包装提及的条目；完全未见则写 ["图中未清晰显示不良反应"]）
+   - package_insert：说明书要点（3–6 句，必须覆盖：功效、用法用量、注意事项、储存）
+   - warnings：禁忌与警示（过敏、孕妇、儿童、酒精、处方药等）
+3. 中文药盒请仔细读正面适应症段落与侧面/背面用法用量；英文包装则译成用户 locale。
 4. translated_summary 用用户 locale 写简明摘要；强调非医疗诊断
 5. disclaimer 必须提醒遵医嘱与说明书原文
 6. explore_chips.culinary 放 2–3 个用药向追问（用法用量 / 不良反应 / 说明书注意点）

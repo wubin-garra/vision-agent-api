@@ -60,7 +60,9 @@ function buildVisionAnalyzeUserText(input: {
       : "";
   const medHint =
     input.agentId === "med_label"
-      ? "\n\n这是药品说明：必须输出 med_label_reading；务必从包装可见文字尽量提取 usage（适应症）、dosage/dosage_steps（用法用量）、adverse_reactions（不良反应）、package_insert（说明书要点）、warnings（禁忌）；看不清用 null/空数组，禁止编造医嘱。"
+      ? "\n\n这是药品说明：必须看清药盒/说明书文字并输出完整 med_label_reading。" +
+        "usage（功效/适应症）、dosage 与 dosage_steps（用法用量）、adverse_reactions、package_insert、warnings 尽量填满；" +
+        "中文药盒正面适应症小字与用法用量栏必须尝试转录整理。确实看不清写「图中未清晰显示…」，禁止凭常识编造具体毫克剂量。"
       : "";
   const sightHint =
     input.agentId === "sight_route"
@@ -226,9 +228,13 @@ export class VlmService {
 
     // 自动模式：视觉多模态直出
     // 看手相师：必须看图描摹真实掌纹坐标（qualityMode 也不能只走纯文本 LLM）
+    // 药品说明/菜单翻译：必须看图读字，caption+纯文本容易丢掉用法用量与功效
     // 其他专项 qualityMode：caption + DeepSeek 完整 JSON
     const forceVision =
-      input.agentId === "palm_reader" || (!qualityMode && visionService.enabled);
+      input.agentId === "palm_reader" ||
+      input.agentId === "med_label" ||
+      input.agentId === "menu_translator" ||
+      (!qualityMode && visionService.enabled);
 
     if (forceVision && visionService.enabled) {
       const userText = buildVisionAnalyzeUserText({

@@ -51,7 +51,14 @@ function buildVisionAnalyzeUserText(input: {
   const snackHint =
     input.agentId === "food_explorer"
       ? "\n\n这是零食分析：仔细读包装上的品名、口味、配料与过敏原。" +
-        "必须输出 snack_analysis；看不清的字段用 null/空数组，禁止编造品牌。"
+        "必须输出 snack_analysis；看不清的字段用 null/空数组，禁止编造品牌。" +
+        "若图中是盘装/碗装正餐（非包装袋），降低 confidence，并在 narrative 说明这不是零食包装。"
+      : "";
+  const foodScanHint =
+    input.agentId === "food_scan"
+      ? "\n\n这是食识拍：菜名必须按烹饪方式准确命名。" +
+        "米粒黏连、有奶油/淀粉光泽 → 意大利烩饭(risotto)，禁止写成炒饭/蛋炒饭/海鲜煮饭；" +
+        "米粒分明偏干有油炒感 → 炒饭。title、category、narrative 三者须一致。"
       : "";
   const menuHint =
     input.agentId === "menu_translator"
@@ -87,6 +94,7 @@ function buildVisionAnalyzeUserText(input: {
     captionHint +
     palmHint +
     snackHint +
+    foodScanHint +
     menuHint +
     medHint +
     sightHint +
@@ -336,6 +344,7 @@ export class VlmService {
       "请根据描述选择最合适的【当前可用】专项智能体。" +
       "优先 flight_info / hotel_guide / med_label / menu_translator / food_scan / food_explorer / palm_reader / stylist / sight_route / local_guide；" +
       "无法匹配再用 general_curiosity。不要选 art_critic、text_reader、design_critic。" +
+      "餐饮提醒：盘装/碗装正餐（含烩饭、炒饭、米饭料理）选 food_scan；仅有零食包装袋/配料表才选 food_explorer。" +
       "只输出 JSON。";
 
     return this.chatJson({

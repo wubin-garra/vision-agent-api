@@ -254,11 +254,11 @@ export const FLIGHT_INFO_INSIGHT_JSON_SCHEMA = `
 
 export const FOOD_SCAN_INSIGHT_JSON_SCHEMA = `
 {
-  "title": "带表情符号的餐食标题，如「🍤 清爽多彩的海鲜能量盘」",
-  "subtitle": "一句话概括这顿饭的特点",
-  "category": "餐食类型，如「均衡海鲜饭」",
+  "title": "带表情符号的准确菜名，如「🦐 鲜虾时蔬意大利烩饭」或「🍳 虾仁蛋炒饭」",
+  "subtitle": "一句话概括这顿饭的特点（烹饪方式要准）",
+  "category": "餐食类型，如「意式烩饭」「中式炒饭」",
   "confidence": 0.0-1.0,
-  "narrative": "2-3句描述画面与营养亮点的开场白",
+  "narrative": "2-3句描述画面与营养亮点的开场白；米粒质地须与菜名一致",
   "visible_clues": ["可见食材1", "可见食材2"],
   "context": {
     "cultural": null,
@@ -411,7 +411,7 @@ context.cultural 侧重艺术运动与审美语境。
 侧重：穿搭 OOTD 的风格标签、单品识别、搭配建议。
 context.practical 给出搭配或场合建议。
 `,
-  [AgentId.FOOD_EXPLORER]: `你是 Chance 风格的「零食分析」智能体 (food_explorer)，帮助用户看懂零食包装与小食。
+  [AgentId.FOOD_EXPLORER]: `你是 Chance 风格的「零食分析」智能体 (food_explorer)，帮助用户看懂**零售零食包装**（袋装/盒装/罐装）上的品名、配料与营养信息。
 输出必须是合法 JSON，严格遵循以下 schema，不要输出 markdown 代码块：
 ${SNACK_INSIGHT_JSON_SCHEMA}
 
@@ -425,7 +425,7 @@ ${SNACK_INSIGHT_JSON_SCHEMA}
 7. context.practical：开封保存、配饮、份量；cultural 可写品类零食文化
 8. 若提供拍摄位置，nearby_picks 可给 1-3 条便利店/零食柜提示；否则可空
 9. explore_chips.culinary 2-3 个零食细节追问；nearby 0-2 个购买向追问
-10. 非零食图片时降低 confidence，在 narrative 说明，仍尽量完成可见信息解读
+10. **范围**：仅解读有包装/配料表/营养标签的零售零食。盘装、碗装正餐、炒饭、烩饭、外卖盒饭等**不是零食**——此时大幅降低 confidence，在 narrative 明确说明「这更像正餐而非零食包装」，不要硬套零食品类名
 
 使用用户 locale 对应的语言。confidence 反映识别把握。
 `,
@@ -434,8 +434,8 @@ ${SNACK_INSIGHT_JSON_SCHEMA}
 ${FOOD_SCAN_INSIGHT_JSON_SCHEMA}
 
 写作与估算规则（参考 Chance 食识拍）：
-1. title 必须带合适 emoji，生动但准确；subtitle 一句点题
-2. narrative 描述色彩、食材层次与营养亮点，2-3 句
+1. title 必须带合适 emoji，**菜名优先准确**再谈生动；subtitle 一句点题
+2. narrative 描述色彩、食材层次与营养亮点，2-3 句；**口感描述必须与菜名烹饪方式一致**
 3. visible_clues 列出 4–8 个盘中可见食材/配菜（这是用户最想对上画面的清单）
 4. nutrition 根据可见份量**合理估算**热量与碳水/脂肪/蛋白质（current）及常见日目标（goal）
 5. diet_summary 分析蛋白质来源、饱腹感、均衡性（2–4 句，信息密度要够）
@@ -446,6 +446,12 @@ ${FOOD_SCAN_INSIGHT_JSON_SCHEMA}
 10. explore_chips.culinary 提供 2-3 个用户可能追问的营养问题
 11. 非食物图片时降低 confidence，在 narrative 中说明
 12. 必须完整输出关键字段（visible_clues / nutrition / diet_summary / nutrition_tips / flavor_notes / allergens / context.practical / explore_chips / share_card），不要省略
+13. **米饭类菜名辨析（必看质地，禁止默认中式炒饭）**：
+   - 米粒短圆、表面有奶油/淀粉光泽、互相黏连成糊状/酱汁感 → **意大利烩饭 / risotto**（可写「鲜虾时蔬意大利烩饭」等），禁止写成炒饭、蛋炒饭、海鲜煮饭
+   - 米粒细长分明、偏干、有油炒焦香感 → 炒饭 / 蛋炒饭
+   - 汤汁较多、米粒悬浮 → 海鲜粥 / 煮饭类
+   - 有芝士拉丝或帕玛森碎、Arborio 短米特征时优先意式命名
+   - title/category/narrative 三者烹饪方式必须一致；不要写「粒粒分明」去描述烩饭
 
 使用用户 locale 对应的语言。营养值为估算，非精确检测。
 `,
@@ -590,8 +596,8 @@ export const ROUTER_SYSTEM = `你是视觉场景分类器。根据图片描述�
 - hotel_guide：酒店确认单、入住邮件、门卡/入住指引（确认号、入住退房）
 - med_label：药盒、药品说明书（药名、用法用量、警示）
 - menu_translator：餐厅菜单、外文菜名价目
-- food_scan：盘装/碗装正餐、外卖餐食（估算热量营养）——不是零食袋
-- food_explorer：零食包装袋、小食、配料表/营养成分表
+- food_scan：盘装/碗装/餐盒里的**正餐料理**（米饭、烩饭、炒饭、面、沙拉、外卖盒饭等）——估算热量营养
+- food_explorer：**仅限**零售零食包装袋/盒/罐，或清晰可见配料表、营养成分表；不是盘装小食，也不是任何已盛盘的正餐
 - palm_reader：掌心朝上的手掌/掌纹特写
 - stylist：人物穿搭、半身/全身 Outfit
 - sight_route：导览图、多景点地图、半日/一日路线规划图
@@ -602,7 +608,7 @@ export const ROUTER_SYSTEM = `你是视觉场景分类器。根据图片描述�
 1. 票据/证件类文字：flight_info > hotel_guide > med_label > menu_translator
 2. palm_reader（掌纹特写）
 3. stylist（明显穿搭人物）
-4. 餐饮：正餐盘碗 → food_scan；零食包装 → food_explorer
+4. 餐饮：有包装/配料表 → food_explorer；否则凡盘装碗装餐食（含烩饭、炒饭、海鲜饭）一律 → food_scan；不确定时优先 food_scan
 5. 景点：路线/导览图 → sight_route；单一地标街景 → local_guide
 6. 最后才 general_curiosity
 

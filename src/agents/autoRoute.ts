@@ -71,7 +71,7 @@ const CAPTION_HINTS: CaptionRule[] = [
   {
     agent: AgentId.FOOD_SCAN,
     pattern:
-      /盘装|碗装|餐盘|正餐|外卖餐|套餐|沙拉碗|米饭|面条|plated\s*(meal|food)|bowl\s*of/i,
+      /盘装|碗装|餐盘|白盘|瓷盘|正餐|外卖餐|套餐|沙拉碗|米饭|烩饭|risotto|炒饭|面条|意面|pasta|plated\s*(meal|food)|bowl\s*of|一盘|一碗/i,
   },
   {
     agent: AgentId.SIGHT_ROUTE,
@@ -82,6 +82,14 @@ const CAPTION_HINTS: CaptionRule[] = [
     pattern: /穿搭|全身照|outfit|street\s*style|服装搭配/i,
   },
 ];
+
+/** 零售零食包装线索：有这些才算 food_explorer 强证据 */
+const SNACK_PACKAGING_HINT =
+  /零食|薯片|巧克力棒|糖果袋|配料表|nutrition\s*facts|ingredients?\s*:|snack\s*(pack|bag)|包装袋|铝箔袋|自立袋|食品包装/i;
+
+/** 盘装/碗装正餐线索：误入零食分析时用于纠偏到食识拍 */
+const PLATED_MEAL_HINT =
+  /盘装|碗装|餐盘|白盘|瓷盘|正餐|外卖餐|套餐|沙拉碗|米饭|烩饭|risotto|炒饭|面条|意面|pasta|plated\s*(meal|food)|bowl\s*of|一盘|一碗|餐食|料理/i;
 
 function isAutoRouteAgent(id: string): id is AutoRouteAgentId {
   return AUTO_ROUTE_SET.has(id);
@@ -97,6 +105,7 @@ function hintFromCaption(caption: string | null | undefined): AgentId | null {
 
 /**
  * 将分类器推荐收束到菜单可用 Agent；弱结果时用 caption 关键词抬升专项。
+ * 特例：LLM 把盘装正餐错判为零食分析时，若无包装证据则纠偏到食识拍。
  */
 export function resolveAutoRouteAgent(
   recommended: AgentId | string | null | undefined,
@@ -107,6 +116,15 @@ export function resolveAutoRouteAgent(
   const base = isAutoRouteAgent(remapped)
     ? remapped
     : AgentId.GENERAL_CURIOSITY;
+
+  if (
+    base === AgentId.FOOD_EXPLORER &&
+    caption?.trim() &&
+    PLATED_MEAL_HINT.test(caption) &&
+    !SNACK_PACKAGING_HINT.test(caption)
+  ) {
+    return AgentId.FOOD_SCAN;
+  }
 
   if (base !== AgentId.GENERAL_CURIOSITY) {
     return base;

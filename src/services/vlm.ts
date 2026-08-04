@@ -50,9 +50,10 @@ function buildVisionAnalyzeUserText(input: {
   // 视觉直出路径的补充指令（与 AGENT_PROMPTS 互补，强调必填结构）
   const snackHint =
     input.agentId === "food_explorer"
-      ? "\n\n这是零食分析：仔细读包装上的品名、口味、配料与过敏原。" +
-        "必须输出 snack_analysis；看不清的字段用 null/空数组，禁止编造品牌。" +
-        "若图中是盘装/碗装正餐（非包装袋），降低 confidence，并在 narrative 说明这不是零食包装。"
+      ? "\n\n这是零食分析：必须先通读包装全部文字与图标，确认是可食用零食。" +
+        "若有疏通/腐蚀/管道/清洁剂/过碳酸盐/马桶地漏图标等 → 这是危险化学品，不是食品：" +
+        "title 写「⚠️ 不可食用」+真名，snack_type=非食品，禁止写成汤包/零食，禁止给可食热量。" +
+        "确认为零食时：输出 snack_analysis；看不清字段用 null/空数组，禁止编造品牌。"
       : "";
   const foodScanHint =
     input.agentId === "food_scan"
@@ -341,11 +342,12 @@ export class VlmService {
       (await this.caption(input.imageB64, "zh-CN", undefined, "fast"));
     const userText =
       `图片视觉描述：\n${caption}\n\n` +
-      "请根据描述选择最合适的【当前可用】专项智能体。" +
-      "优先 flight_info / hotel_guide / med_label / menu_translator / food_scan / food_explorer / palm_reader / stylist / sight_route / local_guide；" +
-      "无法匹配再用 general_curiosity。不要选 art_critic、text_reader、design_critic。" +
-      "餐饮提醒：盘装/碗装正餐（含烩饭、炒饭、米饭料理）选 food_scan；仅有零食包装袋/配料表才选 food_explorer。" +
-      "只输出 JSON。";
+      "为自动模式选择智能体：默认 general_curiosity。" +
+      "只有非常有把握（route_confidence≥0.85）才选专项；长得像或不确定不要硬匹配。" +
+      "可选：flight_info / hotel_guide / med_label / menu_translator / food_scan / food_explorer / palm_reader / stylist / sight_route / local_guide / general_curiosity。" +
+      "安全：清洁剂、管道疏通粉、腐蚀性日化等绝不是零食——选 general_curiosity。" +
+      "餐饮：确定可食用零食包装才 food_explorer；确定盘装正餐才 food_scan。" +
+      "不要选 art_critic、text_reader、design_critic。只输出 JSON（含 route_confidence）。";
 
     return this.chatJson({
       model: settings.routerModel,

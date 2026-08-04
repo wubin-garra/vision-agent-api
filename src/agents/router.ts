@@ -1,5 +1,6 @@
 import { resolveAutoRouteAgent } from "./autoRoute.js";
 import { AGENT_PROMPTS, SCENE_TO_AGENT } from "./prompts.js";
+import { sanitizeFoodSafetyInsight } from "./foodSafetySanitize.js";
 import { sanitizeMedLabelInsight } from "./medSanitize.js";
 import { sanitizePalmInsight } from "./palmSanitize.js";
 import {
@@ -48,6 +49,12 @@ export class SceneRouter {
       has_person: Boolean(raw.has_person),
       recommended_agent: raw.recommended_agent ?? "general_curiosity",
       reasoning: raw.reasoning ?? "",
+      route_confidence:
+        typeof raw.route_confidence === "number"
+          ? raw.route_confidence
+          : typeof raw.confidence === "number"
+            ? raw.confidence
+            : undefined,
     });
 
     const recommended = parsed.success
@@ -55,10 +62,19 @@ export class SceneRouter {
       : (SCENE_TO_AGENT[String(raw.scene_type ?? "general")] ??
         AgentId.GENERAL_CURIOSITY);
 
-    const resolved = resolveAutoRouteAgent(recommended, input.imageCaption);
+    const routeConfidence = parsed.success
+      ? (parsed.data.route_confidence ?? null)
+      : null;
+
+    const resolved = resolveAutoRouteAgent(
+      recommended,
+      input.imageCaption,
+      routeConfidence,
+    );
     if (resolved !== recommended) {
       console.log(
         `[analyze] auto-route remap ${recommended} → ${resolved}` +
+          (routeConfidence != null ? ` conf=${routeConfidence}` : "") +
           (raw.reasoning ? ` (${String(raw.reasoning)})` : ""),
       );
     }
@@ -110,6 +126,12 @@ export class InsightPlanner {
     }
     if (input.agentId === AgentId.MED_LABEL) {
       return sanitizeMedLabelInsight(parsed.data);
+    }
+    if (
+      input.agentId === AgentId.FOOD_EXPLORER ||
+      input.agentId === AgentId.FOOD_SCAN
+    ) {
+      return sanitizeFoodSafetyInsight(parsed.data, input.imageCaption);
     }
     return parsed.data;
   }

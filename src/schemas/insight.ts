@@ -382,6 +382,8 @@ export const sceneClassificationSchema = z.object({
   has_person: z.boolean().default(false),
   recommended_agent: agentIdSchema.default("general_curiosity"),
   reasoning: z.string().default(""),
+  /** 自动路由对专项的把握；缺省视为不确定 */
+  route_confidence: z.number().min(0).max(1).optional(),
 });
 
 export type SceneClassification = z.infer<typeof sceneClassificationSchema>;

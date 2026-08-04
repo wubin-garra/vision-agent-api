@@ -1,6 +1,12 @@
 import type { FastifyInstance } from "fastify";
 
 import {
+  assessAgentPhotoFit,
+  assessInsightAgentFit,
+  buildAgentMismatchInfo,
+  type AgentMismatchInfo,
+} from "../agents/agentFit.js";
+import {
   insightPlanner,
   parseAgentOverride,
   sceneRouter,
@@ -151,7 +157,7 @@ function timedLog(label: string, started: number): void {
 }
 
 /**
- * 有 override（专项镜头）：完整 caption → DeepSeek 完整 JSON（质量优先）
+ * 有 override（专项镜头）：完整 caption → 对题校验 → DeepSeek 完整 JSON（质量优先）
  * 无 override（自动）：fast caption → router（仅菜单可用 Agent）→ vision oneshot（速度优先）
  */
 async function runAnalyzePipeline(input: {
@@ -163,13 +169,20 @@ async function runAnalyzePipeline(input: {
   agentOverride?: ReturnType<typeof parseAgentOverride>;
   onStage?: (stage: string) => void;
   onAgent?: (agentId: AgentId) => void;
-}): Promise<{ caption: string; agentId: AgentId; insight: StructuredInsight }> {
+  onMismatch?: (info: AgentMismatchInfo) => void;
+}): Promise<{
+  caption: string;
+  agentId: AgentId;
+  insight: StructuredInsight;
+  agentMismatch?: AgentMismatchInfo;
+}> {
   const imageB64 = input.imageBytes.toString("base64");
   const pipelineStarted = Date.now();
 
   if (input.agentOverride) {
+    const requested = input.agentOverride;
     input.onStage?.("captioning");
-    input.onAgent?.(input.agentOverride);
+    input.onAgent?.(requested);
     const captionStarted = Date.now();
     const caption = await visionService.describeImage(
       imageB64,
@@ -179,16 +192,35 @@ async function runAnalyzePipeline(input: {
     );
     timedLog("full_caption", captionStarted);
 
+    const fit = assessAgentPhotoFit(requested, caption);
+    let analyzeAgent: AgentId = requested;
+    let agentMismatch: AgentMismatchInfo | undefined;
+
+    if (!fit.matched) {
+      agentMismatch = buildAgentMismatchInfo(
+        requested,
+        fit.suggestedAgent,
+        fit.reason,
+      );
+      analyzeAgent = fit.suggestedAgent;
+      input.onStage?.("mismatch");
+      input.onMismatch?.(agentMismatch);
+      input.onAgent?.(analyzeAgent);
+      console.log(
+        `[analyze] agent mismatch ${requested} → ${analyzeAgent} (${fit.reason})`,
+      );
+    }
+
     input.onStage?.("analyzing");
     const insightStarted = Date.now();
     const geometryPromise =
-      input.agentOverride === AgentId.PALM_READER
+      analyzeAgent === AgentId.PALM_READER
         ? resolvePalmPaths(input.imageBytes)
         : Promise.resolve(null);
     const [insight, geometry] = await Promise.all([
       insightPlanner.analyze({
         imageBytes: input.imageBytes,
-        agentId: input.agentOverride,
+        agentId: analyzeAgent,
         locale: input.locale,
         imageCaption: caption,
         latitude: input.latitude,
@@ -200,15 +232,41 @@ async function runAnalyzePipeline(input: {
     ]);
     timedLog("insight_quality", insightStarted);
     timedLog("pipeline_override_total", pipelineStarted);
-    const finalInsight = geometry
+    let finalInsight = geometry
       ? sanitizePalmInsight(insight, geometry.paths)
       : insight;
+
+    // caption 未拦住时，再看洞察结果（如非食品改写、模型自述跑题）
+    if (!agentMismatch) {
+      const postFit = assessInsightAgentFit(requested, finalInsight);
+      if (!postFit.matched) {
+        agentMismatch = buildAgentMismatchInfo(
+          requested,
+          AgentId.GENERAL_CURIOSITY,
+          postFit.reason,
+        );
+        input.onStage?.("mismatch");
+        input.onMismatch?.(agentMismatch);
+        if (finalInsight.agent_id === requested) {
+          // 仍返回原 insight，但附带 mismatch，由前端引导换图 / 智能解读
+          console.log(
+            `[analyze] post-insight mismatch ${requested} (${postFit.reason})`,
+          );
+        }
+      }
+    }
+
     if (geometry) {
       console.log(
         `[analyze] palm_geometry source=${geometry.source} (parallel with insight)`,
       );
     }
-    return { caption, agentId: input.agentOverride, insight: finalInsight };
+    return {
+      caption,
+      agentId: finalInsight.agent_id ?? analyzeAgent,
+      insight: finalInsight,
+      agentMismatch,
+    };
   }
 
   input.onStage?.("captioning");
@@ -270,7 +328,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
     const { filename, processed } = await storageService.saveImage(form.image);
     const thumbFilename = filename.replace(".jpg", "_thumb.jpg");
 
-    const { caption, agentId, insight } = await runAnalyzePipeline({
+    const { caption, agentId, insight, agentMismatch } = await runAnalyzePipeline({
       imageBytes: processed,
       locale: form.locale,
       latitude: form.latitude,
@@ -299,6 +357,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
       insight,
       image_url: `/uploads/${filename}`,
       thumbnail_url: `/uploads/${thumbFilename}`,
+      ...(agentMismatch ? { agent_mismatch: agentMismatch } : {}),
     };
   });
 
@@ -318,6 +377,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
     try {
       let caption = "";
       let agentId: AgentId = AgentId.GENERAL_CURIOSITY;
+      let agentMismatch: AgentMismatchInfo | undefined;
 
       const analyzePromise = (async () => {
         const result = await runAnalyzePipeline({
@@ -332,9 +392,14 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
             agentId = id;
             sendSse(reply, "agent", { agent_id: id });
           },
+          onMismatch: (info) => {
+            agentMismatch = info;
+            sendSse(reply, "mismatch", info);
+          },
         });
         caption = result.caption;
         agentId = result.agentId;
+        agentMismatch = result.agentMismatch ?? agentMismatch;
         return result.insight;
       })();
 
@@ -390,6 +455,7 @@ export async function analyzeRoutes(app: FastifyInstance): Promise<void> {
         insight,
         image_url: `/uploads/${filename}`,
         thumbnail_url: `/uploads/${thumbFilename}`,
+        ...(agentMismatch ? { agent_mismatch: agentMismatch } : {}),
       });
     } catch (err) {
       sendSse(reply, "error", {
